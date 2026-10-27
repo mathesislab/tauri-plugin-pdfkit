@@ -13,7 +13,7 @@ use objc2::runtime::{AnyObject, NSObjectProtocol, ProtocolObject};
 use objc2::{AnyThread, MainThreadMarker, MainThreadOnly};
 use objc2_app_kit::{NSColor, NSView, NSWindowOrderingMode};
 use objc2_foundation::{
-    NSArray, NSNotification, NSNotificationCenter, NSPoint, NSRect, NSSize, NSString,
+    NSArray, NSEdgeInsets, NSNotification, NSNotificationCenter, NSPoint, NSRect, NSSize, NSString,
     NSStringCompareOptions, NSURL,
 };
 use objc2_pdf_kit::{
@@ -122,6 +122,13 @@ pub async fn pdf_open(
         let view = unsafe { PDFView::initWithFrame(PDFView::alloc(mtm), rect(content, frame)) };
         unsafe {
             view.setDisplayMode(PDFDisplayMode::SinglePageContinuous);
+            // margins at the sides of the pages, as Preview leaves them
+            view.setPageBreakMargins(NSEdgeInsets {
+                top: 8.0,
+                left: 24.0,
+                bottom: 8.0,
+                right: 24.0,
+            });
             view.setAutoScales(true);
             view.setBackgroundColor(&NSColor::underPageBackgroundColor());
             view.setDocument(Some(&document));
@@ -132,6 +139,10 @@ pub async fn pdf_open(
             }
         }
         content.addSubview_positioned_relativeTo(&view, NSWindowOrderingMode::Above, None);
+        // the keys scroll the PDF at once
+        if let Some(window) = view.window() {
+            window.makeFirstResponder(Some(&view));
+        }
         let observer = observe(handle, &view, &document);
         let opened = Opened {
             count: unsafe { document.pageCount() },
@@ -237,7 +248,14 @@ pub fn close(_: MainThreadMarker) {
     if let Some(shown) = SHOWN.take() {
         let observer: &AnyObject = (*shown.observer).as_ref();
         unsafe { NSNotificationCenter::defaultCenter().removeObserver(observer) };
+        // the keys go back to the page
+        let page = unsafe { shown.view.superview() };
         shown.view.removeFromSuperview();
+        if let Some(page) = page
+            && let Some(window) = page.window()
+        {
+            window.makeFirstResponder(Some(&page));
+        }
     }
 }
 
