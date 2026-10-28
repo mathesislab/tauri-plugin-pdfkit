@@ -27,7 +27,8 @@ use crate::main_window::MAIN;
 
 /// The reader area of the page, in CSS pixels from the top left of its
 /// viewport, and the height of the viewport: the web view also lies under
-/// the title bar, and the page starts below it.
+/// the title bar, and the page starts below it. The zoom of the text size
+/// makes a CSS pixel larger than a point: `rect` multiplies by it.
 #[derive(Debug, Clone, Copy, Deserialize)]
 pub struct Frame {
     x: f64,
@@ -112,6 +113,7 @@ pub async fn pdf_open(
         .map_err(|e| e.to_string())?;
     let webview = rx.recv().map_err(|e| e.to_string())?;
     let handle = app.clone();
+    let zoom = crate::text_size::factor(&app);
     on_main(&app, move |mtm| {
         close(mtm);
         // the web view lives while its page asks
@@ -119,7 +121,7 @@ pub async fn pdf_open(
         let url = NSURL::fileURLWithPath(&NSString::from_str(&file.to_string_lossy()));
         let document = unsafe { PDFDocument::initWithURL(PDFDocument::alloc(), &url) }
             .ok_or_else(|| format!("{}: not a PDF that PDFKit reads", file.display()))?;
-        let view = unsafe { PDFView::initWithFrame(PDFView::alloc(mtm), rect(content, frame)) };
+        let view = unsafe { PDFView::initWithFrame(PDFView::alloc(mtm), rect(content, frame, zoom)) };
         unsafe {
             view.setDisplayMode(PDFDisplayMode::SinglePageContinuous);
             // margins at the sides of the pages, as Preview leaves them
@@ -203,8 +205,16 @@ fn entries(outline: &PDFOutline, path: &mut Vec<usize>) -> Vec<Entry> {
 }
 
 /// A frame of the page in the coordinates of the web view, whose origin may
-/// be at the bottom; the viewport of the page is at its bottom.
-fn rect(content: &NSView, frame: Frame) -> NSRect {
+/// be at the bottom; the viewport of the page is at its bottom. `zoom`: the
+/// points of a CSS pixel.
+fn rect(content: &NSView, frame: Frame, zoom: f64) -> NSRect {
+    let frame = Frame {
+        x: frame.x * zoom,
+        y: frame.y * zoom,
+        width: frame.width * zoom,
+        height: frame.height * zoom,
+        viewport: frame.viewport * zoom,
+    };
     let height = content.bounds().size.height;
     let top = (height - frame.viewport).max(0.0);
     let y = if content.isFlipped() {
@@ -221,12 +231,13 @@ fn rect(content: &NSView, frame: Frame) -> NSRect {
 /// The reader area moved or changed size.
 #[tauri::command]
 pub async fn pdf_frame(app: AppHandle, frame: Frame) -> Result<(), String> {
+    let zoom = crate::text_size::factor(&app);
     on_main(&app, move |_| {
         SHOWN.with_borrow(|shown| {
             if let Some(Shown { view, .. }) = shown
                 && let Some(content) = unsafe { view.superview() }
             {
-                view.setFrame(rect(&content, frame));
+                view.setFrame(rect(&content, frame, zoom));
             }
         });
     })
