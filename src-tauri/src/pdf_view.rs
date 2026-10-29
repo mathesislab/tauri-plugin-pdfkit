@@ -84,7 +84,7 @@ fn on_main<R: Send + 'static>(
 }
 
 /// Open the PDF of item `id` at `page` (from 1), over `frame`, in place of
-/// the one shown.
+/// the one shown; hidden when a modal of the page is `covered`.
 #[tauri::command]
 pub async fn pdf_open(
     app: AppHandle,
@@ -92,6 +92,7 @@ pub async fn pdf_open(
     id: String,
     page: usize,
     frame: Frame,
+    covered: bool,
 ) -> Result<Opened, String> {
     let item = state.item(&id)?;
     let file = item
@@ -141,8 +142,9 @@ pub async fn pdf_open(
             }
         }
         content.addSubview_positioned_relativeTo(&view, NSWindowOrderingMode::Above, None);
+        view.setHidden(covered);
         // the keys scroll the PDF at once
-        if let Some(window) = view.window() {
+        if !covered && let Some(window) = view.window() {
             window.makeFirstResponder(Some(&view));
         }
         let observer = observe(handle, &view, &document);
@@ -238,6 +240,29 @@ pub async fn pdf_frame(app: AppHandle, frame: Frame) -> Result<(), String> {
                 && let Some(content) = unsafe { view.superview() }
             {
                 view.setFrame(rect(&content, frame, zoom));
+            }
+        });
+    })
+}
+
+/// A modal of the page opened (`covered`) or closed: the view, which lies above all of the page, hides
+/// so that the modal shows and takes the keys, and is shown again, with the keys, when it is closed.
+#[tauri::command]
+pub async fn pdf_cover(app: AppHandle, id: String, covered: bool) -> Result<(), String> {
+    on_main(&app, move |_| {
+        SHOWN.with_borrow(|shown| {
+            let Some(Shown { view, .. }) = shown.as_ref().filter(|s| s.id == id) else {
+                return;
+            };
+            view.setHidden(covered);
+            let Some(window) = view.window() else { return };
+            if covered {
+                // the keys go to the page, to the modal
+                if let Some(page) = unsafe { view.superview() } {
+                    window.makeFirstResponder(Some(&page));
+                }
+            } else {
+                window.makeFirstResponder(Some(view));
             }
         });
     })
