@@ -1,0 +1,26 @@
+{
+  "name": "tauri-plugin-pdfkit-api",
+  "version": "0.1.0",
+  "description": "The commands of tauri-plugin-pdfkit: a PDF in a native PDFKit view over an area of the page (macOS)",
+  "license": "MIT",
+  "author": "Alexander Robinson",
+  "repository": "github:mathesislab/tauri-plugin-pdfkit",
+  "type": "module",
+  "types": "./dist-js/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist-js/index.d.ts",
+      "import": "./dist-js/index.js"
+    }
+  },
+  "files": ["dist-js"],
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2"
+  },
+  "devDependencies": {
+    "typescript": "~6.0.3"
+  }
+}
