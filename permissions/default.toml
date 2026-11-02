@@ -1,0 +1,13 @@
+"$schema" = "schemas/schema.json"
+
+[default]
+description = "All the commands of the PDF view"
+permissions = [
+  "allow-open",
+  "allow-frame",
+  "allow-cover",
+  "allow-close",
+  "allow-find",
+  "allow-zoom",
+  "allow-go",
+]

@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-cover"
+description = "Enables the cover command without any pre-configured scope."
+commands.allow = ["cover"]
+
+[[permission]]
+identifier = "deny-cover"
+description = "Denies the cover command without any pre-configured scope."
+commands.deny = ["cover"]

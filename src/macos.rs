@@ -1,9 +1,11 @@
-//! The PDF of the paper in front of the main window, in a native view of
-//! PDFKit, as Preview shows it (macOS). The view lies in the web view, over
-//! the reader area of the page, which tells where that area is and drives the
-//! view: find, zoom, the outline; the view tells it of the page in view.
+//! A PDF in a native view of PDFKit, as Preview shows it (macOS). The view
+//! lies in the web view of a window, over an area of its page, which tells
+//! where that area is and drives the view: find, zoom, the outline; the view
+//! tells it of the page in view. One view per window.
 
 use std::cell::RefCell;
+use std::collections::HashMap;
+use std::path::PathBuf;
 use std::ptr::NonNull;
 use std::sync::mpsc;
 
@@ -19,42 +21,11 @@ use objc2_foundation::{
 use objc2_pdf_kit::{
     PDFDisplayMode, PDFDocument, PDFOutline, PDFView, PDFViewPageChangedNotification,
 };
-use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{Emitter, EventTarget, Runtime, WebviewWindow};
 
-use crate::AppState;
-use crate::main_window::MAIN;
+use crate::{Entry, Frame, Opened, PAGE_EVENT};
 
-/// The reader area of the page, in CSS pixels from the top left of its
-/// viewport, and the height of the viewport: the web view also lies under
-/// the title bar, and the page starts below it. The zoom of the text size
-/// makes a CSS pixel larger than a point: `rect` multiplies by it.
-#[derive(Debug, Clone, Copy, Deserialize)]
-pub struct Frame {
-    x: f64,
-    y: f64,
-    width: f64,
-    height: f64,
-    viewport: f64,
-}
-
-/// An entry of the outline; `target`, the indices that lead to it from the
-/// root of the outline.
-#[derive(Debug, Serialize)]
-pub struct Entry {
-    title: String,
-    target: Vec<usize>,
-    items: Vec<Entry>,
-}
-
-/// What the page learns of a PDF opened.
-#[derive(Debug, Serialize)]
-pub struct Opened {
-    count: usize,
-    outline: Vec<Entry>,
-}
-
-/// The PDF shown, with what tells the page of the page in view.
+/// The PDF shown in a window, with what tells the page of the page in view.
 struct Shown {
     id: String,
     view: Retained<PDFView>,
@@ -63,49 +34,45 @@ struct Shown {
 }
 
 thread_local! {
-    /// made and used on the main thread only, as AppKit wants
-    static SHOWN: RefCell<Option<Shown>> = const { RefCell::new(None) };
+    /// the view of each window, by its label; made and used on the main
+    /// thread only, as AppKit wants
+    static SHOWN: RefCell<HashMap<String, Shown>> = RefCell::new(HashMap::new());
 }
 
 /// Run `f` on the main thread, and wait for its answer.
-fn on_main<R: Send + 'static>(
-    app: &AppHandle,
-    f: impl FnOnce(MainThreadMarker) -> R + Send + 'static,
-) -> Result<R, String> {
+fn on_main<R: Runtime, T: Send + 'static>(
+    window: &WebviewWindow<R>,
+    f: impl FnOnce(MainThreadMarker) -> T + Send + 'static,
+) -> Result<T, String> {
     if let Some(mtm) = MainThreadMarker::new() {
         return Ok(f(mtm));
     }
     let (tx, rx) = mpsc::channel();
-    app.run_on_main_thread(move || {
-        let _ = tx.send(f(MainThreadMarker::new().unwrap()));
-    })
-    .map_err(|e| e.to_string())?;
+    window
+        .run_on_main_thread(move || {
+            let _ = tx.send(f(MainThreadMarker::new().unwrap()));
+        })
+        .map_err(|e| e.to_string())?;
     rx.recv().map_err(|e| e.to_string())
 }
 
-/// Open the PDF of item `id` at `page` (from 1), over `frame`, in place of
-/// the one shown; hidden when a modal of the page is `covered`.
-#[tauri::command]
-pub async fn pdf_open(
-    app: AppHandle,
-    state: State<'_, AppState>,
+/// Open `path` at `page` (from 1), over `frame`, in place of the PDF the
+/// window shows; hidden when a modal of the page is `covered`. `zoom`: the
+/// points of a CSS pixel.
+pub fn open<R: Runtime>(
+    window: WebviewWindow<R>,
     id: String,
+    path: PathBuf,
     page: usize,
     frame: Frame,
     covered: bool,
+    zoom: f64,
 ) -> Result<Opened, String> {
-    let item = state.item(&id)?;
-    let file = item
-        .files
-        .into_iter()
-        .find(|f| f.extension().is_some_and(|e| e.eq_ignore_ascii_case("pdf")))
-        .ok_or(format!("{id}: no PDF"))?;
-    if !file.exists() {
-        return Err(format!("{}: not found", file.display()));
+    if !path.exists() {
+        return Err(format!("{}: not found", path.display()));
     }
     // the web view, in whose coordinates the page gives the area; a pointer
     // is not Send: its address goes to the main thread
-    let window = app.get_webview_window(MAIN).ok_or("no main window")?;
     let (tx, rx) = mpsc::channel();
     window
         .with_webview(move |webview| {
@@ -113,15 +80,15 @@ pub async fn pdf_open(
         })
         .map_err(|e| e.to_string())?;
     let webview = rx.recv().map_err(|e| e.to_string())?;
-    let handle = app.clone();
-    let zoom = crate::text_size::factor(&app);
-    on_main(&app, move |mtm| {
-        close(mtm);
+    let label = window.label().to_string();
+    let handle = window.clone();
+    on_main(&window, move |mtm| {
+        remove(&label);
         // the web view lives while its page asks
         let content = unsafe { &*(webview as *const NSView) };
-        let url = NSURL::fileURLWithPath(&NSString::from_str(&file.to_string_lossy()));
+        let url = NSURL::fileURLWithPath(&NSString::from_str(&path.to_string_lossy()));
         let document = unsafe { PDFDocument::initWithURL(PDFDocument::alloc(), &url) }
-            .ok_or_else(|| format!("{}: not a PDF that PDFKit reads", file.display()))?;
+            .ok_or_else(|| format!("{}: not a PDF that PDFKit reads", path.display()))?;
         let view = unsafe { PDFView::initWithFrame(PDFView::alloc(mtm), rect(content, frame, zoom)) };
         unsafe {
             view.setDisplayMode(PDFDisplayMode::SinglePageContinuous);
@@ -154,28 +121,34 @@ pub async fn pdf_open(
                 .map(|root| entries(&root, &mut Vec::new()))
                 .unwrap_or_default(),
         };
-        SHOWN.set(Some(Shown {
-            id,
-            view,
-            document,
-            observer,
-        }));
+        SHOWN.with_borrow_mut(|shown| {
+            shown.insert(
+                label,
+                Shown {
+                    id,
+                    view,
+                    document,
+                    observer,
+                },
+            )
+        });
         Ok(opened)
     })?
 }
 
-/// The page in view, told to the page as it changes (the notification comes
-/// on the main thread, where the view is).
-fn observe(
-    app: AppHandle,
+/// The page in view, told to the page of the window as it changes (the
+/// notification comes on the main thread, where the view is).
+fn observe<R: Runtime>(
+    window: WebviewWindow<R>,
     view: &Retained<PDFView>,
     document: &Retained<PDFDocument>,
 ) -> Retained<ProtocolObject<dyn NSObjectProtocol>> {
     let (shown, doc) = (view.clone(), document.clone());
+    let target = EventTarget::webview_window(window.label());
     let block = RcBlock::new(move |_: NonNull<NSNotification>| {
         if let Some(page) = unsafe { shown.currentPage() } {
             let index = unsafe { doc.indexForPage(&page) };
-            let _ = app.emit_to(MAIN, "pdf-page", index + 1);
+            let _ = window.emit_to(target.clone(), PAGE_EVENT, index + 1);
         }
     });
     unsafe {
@@ -230,13 +203,12 @@ fn rect(content: &NSView, frame: Frame, zoom: f64) -> NSRect {
     )
 }
 
-/// The reader area moved or changed size.
-#[tauri::command]
-pub async fn pdf_frame(app: AppHandle, frame: Frame) -> Result<(), String> {
-    let zoom = crate::text_size::factor(&app);
-    on_main(&app, move |_| {
+/// The area of the window's view moved or changed size.
+pub fn set_frame<R: Runtime>(window: WebviewWindow<R>, frame: Frame, zoom: f64) -> Result<(), String> {
+    let label = window.label().to_string();
+    on_main(&window, move |_| {
         SHOWN.with_borrow(|shown| {
-            if let Some(Shown { view, .. }) = shown
+            if let Some(Shown { view, .. }) = shown.get(&label)
                 && let Some(content) = unsafe { view.superview() }
             {
                 view.setFrame(rect(&content, frame, zoom));
@@ -247,11 +219,11 @@ pub async fn pdf_frame(app: AppHandle, frame: Frame) -> Result<(), String> {
 
 /// A modal of the page opened (`covered`) or closed: the view, which lies above all of the page, hides
 /// so that the modal shows and takes the keys, and is shown again, with the keys, when it is closed.
-#[tauri::command]
-pub async fn pdf_cover(app: AppHandle, id: String, covered: bool) -> Result<(), String> {
-    on_main(&app, move |_| {
+pub fn cover<R: Runtime>(window: WebviewWindow<R>, id: String, covered: bool) -> Result<(), String> {
+    let label = window.label().to_string();
+    on_main(&window, move |_| {
         SHOWN.with_borrow(|shown| {
-            let Some(Shown { view, .. }) = shown.as_ref().filter(|s| s.id == id) else {
+            let Some(Shown { view, .. }) = shown.get(&label).filter(|s| s.id == id) else {
                 return;
             };
             view.setHidden(covered);
@@ -268,20 +240,26 @@ pub async fn pdf_cover(app: AppHandle, id: String, covered: bool) -> Result<(), 
     })
 }
 
-/// The paper `id` is not in front any more: its view goes.
-#[tauri::command]
-pub async fn pdf_close(app: AppHandle, id: String) -> Result<(), String> {
-    on_main(&app, move |mtm| {
-        if SHOWN.with_borrow(|shown| shown.as_ref().is_some_and(|s| s.id == id)) {
-            close(mtm);
+/// The PDF `id` is not in front any more: its view goes.
+pub fn close<R: Runtime>(window: WebviewWindow<R>, id: String) -> Result<(), String> {
+    let label = window.label().to_string();
+    on_main(&window, move |_| {
+        if SHOWN.with_borrow(|shown| shown.get(&label).is_some_and(|s| s.id == id)) {
+            remove(&label);
         }
     })
 }
 
-/// The view taken away, if one is shown: when another opens, or the main
-/// window closes.
-pub fn close(_: MainThreadMarker) {
-    if let Some(shown) = SHOWN.take() {
+/// The window `label` is gone: its view goes with it.
+pub fn destroyed(label: &str) {
+    if MainThreadMarker::new().is_some() {
+        remove(label);
+    }
+}
+
+/// The view of the window `label` taken away, if one is shown (on the main thread).
+fn remove(label: &str) {
+    if let Some(shown) = SHOWN.with_borrow_mut(|shown| shown.remove(label)) {
         let observer: &AnyObject = (*shown.observer).as_ref();
         unsafe { NSNotificationCenter::defaultCenter().removeObserver(observer) };
         // the keys go back to the page
@@ -297,16 +275,16 @@ pub fn close(_: MainThreadMarker) {
 
 /// Find `text`, all its places marked: the first one, or `again` the next
 /// (or the one before, `backwards`). Whether found; an empty text clears.
-#[tauri::command]
-pub async fn pdf_find(
-    app: AppHandle,
+pub fn find<R: Runtime>(
+    window: WebviewWindow<R>,
     text: String,
     again: bool,
     backwards: bool,
 ) -> Result<bool, String> {
-    on_main(&app, move |_| {
+    let label = window.label().to_string();
+    on_main(&window, move |_| {
         SHOWN.with_borrow(|shown| {
-            let Some(Shown { view, document, .. }) = shown else {
+            let Some(Shown { view, document, .. }) = shown.get(&label) else {
                 return false;
             };
             unsafe {
@@ -358,12 +336,12 @@ unsafe fn redraw(view: &PDFView) {
     }
 }
 
-/// In (1) or out (-1), or the width of the pane (0).
-#[tauri::command]
-pub async fn pdf_zoom(app: AppHandle, step: i32) -> Result<(), String> {
-    on_main(&app, move |_| {
+/// In (1) or out (-1), or the width of the area (0).
+pub fn zoom<R: Runtime>(window: WebviewWindow<R>, step: i32) -> Result<(), String> {
+    let label = window.label().to_string();
+    on_main(&window, move |_| {
         SHOWN.with_borrow(|shown| {
-            if let Some(Shown { view, .. }) = shown {
+            if let Some(Shown { view, .. }) = shown.get(&label) {
                 unsafe {
                     match step {
                         1.. => view.zoomIn(None),
@@ -377,11 +355,11 @@ pub async fn pdf_zoom(app: AppHandle, step: i32) -> Result<(), String> {
 }
 
 /// Go to an entry of the outline, by its indices from the root.
-#[tauri::command]
-pub async fn pdf_go(app: AppHandle, target: Vec<usize>) -> Result<(), String> {
-    on_main(&app, move |_| {
+pub fn go<R: Runtime>(window: WebviewWindow<R>, target: Vec<usize>) -> Result<(), String> {
+    let label = window.label().to_string();
+    on_main(&window, move |_| {
         SHOWN.with_borrow(|shown| {
-            let Some(Shown { view, document, .. }) = shown else {
+            let Some(Shown { view, document, .. }) = shown.get(&label) else {
                 return;
             };
             unsafe {

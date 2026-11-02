@@ -1,0 +1,23 @@
+[package]
+name = "tauri-plugin-pdfkit"
+version = "0.1.0"
+description = "A PDF in a native PDFKit view, as Preview shows it, over an area of the page of a Tauri window (macOS)"
+authors = ["Alexander Robinson"]
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/mathesislab/tauri-plugin-pdfkit"
+links = "tauri-plugin-pdfkit"
+
+[dependencies]
+tauri = "2"
+serde = { version = "1", features = ["derive"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSURL", "NSArray", "NSGeometry", "NSNotification", "NSOperation", "block2"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSResponder", "NSView", "NSWindow", "NSColor", "NSGraphics"] }
+objc2-pdf-kit = { version = "0.3", default-features = false, features = ["std", "PDFView", "PDFDocument", "PDFPage", "PDFOutline", "PDFSelection", "PDFDestination", "objc2-app-kit"] }
+block2 = "0.6"
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }
