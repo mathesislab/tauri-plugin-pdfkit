@@ -18,11 +18,11 @@ where it began (`src-tauri/src/pdf_view.rs`), and
 ```toml
 # src-tauri/Cargo.toml
 [dependencies]
-tauri-plugin-pdfkit = { git = "https://github.com/mathesislab/tauri-plugin-pdfkit", tag = "v0.2.0" }
+tauri-plugin-pdfkit = { git = "https://github.com/mathesislab/tauri-plugin-pdfkit", tag = "v0.2.1" }
 ```
 
 ```bash
-npm install github:mathesislab/tauri-plugin-pdfkit#v0.2.0
+npm install github:mathesislab/tauri-plugin-pdfkit#v0.2.1
 ```
 
 The crate and the bindings go together: the same tag for both.
@@ -59,10 +59,13 @@ await close("paper-1");
 | `go(target)` | goes to an entry of the outline |
 | `onPage(handler)` | the page in view, as it changes (event `pdfkit:page`, to the web view) |
 
-The views of a window go when the window is destroyed.
+The views of a window go when the window is destroyed, and the view of a
+web view when its page loads again.
 
 ## Versions
 
+- 0.2.1: the view of a web view goes when its page loads again (a reload):
+  nothing keeps it in place any more.
 - 0.2.0: the commands take the web view that calls them, not its window:
   a window may hold several web views. The page event goes to the web view.
 - 0.1.0: from papers-desktop.

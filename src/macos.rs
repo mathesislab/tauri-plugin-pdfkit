@@ -270,6 +270,16 @@ pub fn destroyed(label: &str) {
     }
 }
 
+/// The page of a web view loads (again): its view goes, as nothing on the page keeps it in place any more.
+pub fn unload<R: Runtime>(webview: &Webview<R>) {
+    let label = webview.label().to_string();
+    if MainThreadMarker::new().is_some() {
+        remove(&label);
+    } else {
+        let _ = webview.run_on_main_thread(move || remove(&label));
+    }
+}
+
 /// The view of the web view `label` taken away, if one is shown (on the main thread).
 fn remove(label: &str) {
     if let Some(shown) = SHOWN.with_borrow_mut(|shown| shown.remove(label)) {

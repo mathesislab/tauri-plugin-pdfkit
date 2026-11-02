@@ -11,6 +11,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 use tauri::plugin::{self, TauriPlugin};
+use tauri::webview::PageLoadEvent;
 use tauri::{AppHandle, Manager, RunEvent, Runtime, State, Webview, WindowEvent};
 
 #[cfg(target_os = "macos")]
@@ -97,6 +98,13 @@ impl<R: Runtime> Builder<R> {
             .setup(move |app, _| {
                 app.manage(factor);
                 Ok(())
+            })
+            // a page that loads again (a reload, a crash of its content) no longer keeps the view of the one before
+            // in place: the view goes
+            .on_page_load(|webview, payload| {
+                if matches!(payload.event(), PageLoadEvent::Started) {
+                    platform::unload(webview);
+                }
             })
             .on_event(|_, event| {
                 if let RunEvent::WindowEvent {

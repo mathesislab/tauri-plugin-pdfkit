@@ -35,6 +35,8 @@ pub fn close<R: Runtime>(_: Webview<R>, _: String) -> Result<(), String> {
 
 pub fn destroyed(_: &str) {}
 
+pub fn unload<R: Runtime>(_: &Webview<R>) {}
+
 pub fn find<R: Runtime>(_: Webview<R>, _: String, _: bool, _: bool) -> Result<bool, String> {
     Err(UNSUPPORTED.into())
 }
