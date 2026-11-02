@@ -3,7 +3,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import type { UnlistenFn } from "@tauri-apps/api/event";
-import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 
 /** The place of the area in the page, in CSS pixels, and the height of the
  *  page (mirrors Frame). */
@@ -23,7 +23,7 @@ export function frameOf(el: HTMLElement): Frame {
 }
 
 /** Open `path` at `page` (from 1) over `frame`, in place of the PDF the
- *  window shows; hidden while `covered`. `id` names it for `cover` and `close`. */
+ *  web view shows; hidden while `covered`. `id` names it for `cover` and `close`. */
 export function open(id: string, path: string, page: number, frame: Frame, covered = false): Promise<Opened> {
   return invoke<Opened>("plugin:pdfkit|open", { id, path, page, frame, covered });
 }
@@ -60,7 +60,7 @@ export function go(target: number[]): Promise<void> {
   return invoke("plugin:pdfkit|go", { target });
 }
 
-/** The page in view (from 1), as it changes, in this window. */
+/** The page in view (from 1), as it changes, in this web view. */
 export function onPage(handler: (page: number) => void): Promise<UnlistenFn> {
-  return getCurrentWebviewWindow().listen<number>("pdfkit:page", (e) => handler(e.payload));
+  return getCurrentWebview().listen<number>("pdfkit:page", (e) => handler(e.payload));
 }

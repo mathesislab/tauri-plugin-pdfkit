@@ -1,7 +1,7 @@
 //! A PDF in a native view of PDFKit, as Preview shows it (macOS). The view
-//! lies in the web view of a window, over an area of its page, which tells
-//! where that area is and drives the view: find, zoom, the outline; the view
-//! tells it of the page in view. One view per window.
+//! lies in a web view, over an area of its page, which tells where that area
+//! is and drives the view: find, zoom, the outline; the view tells it of the
+//! page in view. One view per web view: a window may hold several.
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -21,34 +21,36 @@ use objc2_foundation::{
 use objc2_pdf_kit::{
     PDFDisplayMode, PDFDocument, PDFOutline, PDFView, PDFViewPageChangedNotification,
 };
-use tauri::{Emitter, EventTarget, Runtime, WebviewWindow};
+use tauri::{Emitter, EventTarget, Runtime, Webview};
 
 use crate::{Entry, Frame, Opened, PAGE_EVENT};
 
-/// The PDF shown in a window, with what tells the page of the page in view.
+/// The PDF shown in a web view, with what tells the page of the page in view.
 struct Shown {
     id: String,
+    /// the label of the window of the web view
+    window: String,
     view: Retained<PDFView>,
     document: Retained<PDFDocument>,
     observer: Retained<ProtocolObject<dyn NSObjectProtocol>>,
 }
 
 thread_local! {
-    /// the view of each window, by its label; made and used on the main
+    /// the view of each web view, by its label; made and used on the main
     /// thread only, as AppKit wants
     static SHOWN: RefCell<HashMap<String, Shown>> = RefCell::new(HashMap::new());
 }
 
 /// Run `f` on the main thread, and wait for its answer.
 fn on_main<R: Runtime, T: Send + 'static>(
-    window: &WebviewWindow<R>,
+    webview: &Webview<R>,
     f: impl FnOnce(MainThreadMarker) -> T + Send + 'static,
 ) -> Result<T, String> {
     if let Some(mtm) = MainThreadMarker::new() {
         return Ok(f(mtm));
     }
     let (tx, rx) = mpsc::channel();
-    window
+    webview
         .run_on_main_thread(move || {
             let _ = tx.send(f(MainThreadMarker::new().unwrap()));
         })
@@ -57,10 +59,10 @@ fn on_main<R: Runtime, T: Send + 'static>(
 }
 
 /// Open `path` at `page` (from 1), over `frame`, in place of the PDF the
-/// window shows; hidden when a modal of the page is `covered`. `zoom`: the
+/// web view shows; hidden when a modal of the page is `covered`. `zoom`: the
 /// points of a CSS pixel.
 pub fn open<R: Runtime>(
-    window: WebviewWindow<R>,
+    webview: Webview<R>,
     id: String,
     path: PathBuf,
     page: usize,
@@ -74,18 +76,19 @@ pub fn open<R: Runtime>(
     // the web view, in whose coordinates the page gives the area; a pointer
     // is not Send: its address goes to the main thread
     let (tx, rx) = mpsc::channel();
-    window
-        .with_webview(move |webview| {
-            let _ = tx.send(webview.inner() as usize);
+    webview
+        .with_webview(move |platform| {
+            let _ = tx.send(platform.inner() as usize);
         })
         .map_err(|e| e.to_string())?;
-    let webview = rx.recv().map_err(|e| e.to_string())?;
-    let label = window.label().to_string();
-    let handle = window.clone();
-    on_main(&window, move |mtm| {
+    let address = rx.recv().map_err(|e| e.to_string())?;
+    let label = webview.label().to_string();
+    let window = webview.window().label().to_string();
+    let handle = webview.clone();
+    on_main(&webview, move |mtm| {
         remove(&label);
         // the web view lives while its page asks
-        let content = unsafe { &*(webview as *const NSView) };
+        let content = unsafe { &*(address as *const NSView) };
         let url = NSURL::fileURLWithPath(&NSString::from_str(&path.to_string_lossy()));
         let document = unsafe { PDFDocument::initWithURL(PDFDocument::alloc(), &url) }
             .ok_or_else(|| format!("{}: not a PDF that PDFKit reads", path.display()))?;
@@ -126,6 +129,7 @@ pub fn open<R: Runtime>(
                 label,
                 Shown {
                     id,
+                    window,
                     view,
                     document,
                     observer,
@@ -136,19 +140,19 @@ pub fn open<R: Runtime>(
     })?
 }
 
-/// The page in view, told to the page of the window as it changes (the
+/// The page in view, told to the page of the web view as it changes (the
 /// notification comes on the main thread, where the view is).
 fn observe<R: Runtime>(
-    window: WebviewWindow<R>,
+    webview: Webview<R>,
     view: &Retained<PDFView>,
     document: &Retained<PDFDocument>,
 ) -> Retained<ProtocolObject<dyn NSObjectProtocol>> {
     let (shown, doc) = (view.clone(), document.clone());
-    let target = EventTarget::webview_window(window.label());
+    let target = EventTarget::webview(webview.label());
     let block = RcBlock::new(move |_: NonNull<NSNotification>| {
         if let Some(page) = unsafe { shown.currentPage() } {
             let index = unsafe { doc.indexForPage(&page) };
-            let _ = window.emit_to(target.clone(), PAGE_EVENT, index + 1);
+            let _ = webview.emit_to(target.clone(), PAGE_EVENT, index + 1);
         }
     });
     unsafe {
@@ -203,10 +207,10 @@ fn rect(content: &NSView, frame: Frame, zoom: f64) -> NSRect {
     )
 }
 
-/// The area of the window's view moved or changed size.
-pub fn set_frame<R: Runtime>(window: WebviewWindow<R>, frame: Frame, zoom: f64) -> Result<(), String> {
-    let label = window.label().to_string();
-    on_main(&window, move |_| {
+/// The area of the web view's PDF moved or changed size.
+pub fn set_frame<R: Runtime>(webview: Webview<R>, frame: Frame, zoom: f64) -> Result<(), String> {
+    let label = webview.label().to_string();
+    on_main(&webview, move |_| {
         SHOWN.with_borrow(|shown| {
             if let Some(Shown { view, .. }) = shown.get(&label)
                 && let Some(content) = unsafe { view.superview() }
@@ -219,9 +223,9 @@ pub fn set_frame<R: Runtime>(window: WebviewWindow<R>, frame: Frame, zoom: f64) 
 
 /// A modal of the page opened (`covered`) or closed: the view, which lies above all of the page, hides
 /// so that the modal shows and takes the keys, and is shown again, with the keys, when it is closed.
-pub fn cover<R: Runtime>(window: WebviewWindow<R>, id: String, covered: bool) -> Result<(), String> {
-    let label = window.label().to_string();
-    on_main(&window, move |_| {
+pub fn cover<R: Runtime>(webview: Webview<R>, id: String, covered: bool) -> Result<(), String> {
+    let label = webview.label().to_string();
+    on_main(&webview, move |_| {
         SHOWN.with_borrow(|shown| {
             let Some(Shown { view, .. }) = shown.get(&label).filter(|s| s.id == id) else {
                 return;
@@ -241,23 +245,32 @@ pub fn cover<R: Runtime>(window: WebviewWindow<R>, id: String, covered: bool) ->
 }
 
 /// The PDF `id` is not in front any more: its view goes.
-pub fn close<R: Runtime>(window: WebviewWindow<R>, id: String) -> Result<(), String> {
-    let label = window.label().to_string();
-    on_main(&window, move |_| {
+pub fn close<R: Runtime>(webview: Webview<R>, id: String) -> Result<(), String> {
+    let label = webview.label().to_string();
+    on_main(&webview, move |_| {
         if SHOWN.with_borrow(|shown| shown.get(&label).is_some_and(|s| s.id == id)) {
             remove(&label);
         }
     })
 }
 
-/// The window `label` is gone: its view goes with it.
+/// The window `label` is gone: the views of its web views go with it.
 pub fn destroyed(label: &str) {
     if MainThreadMarker::new().is_some() {
-        remove(label);
+        let gone: Vec<String> = SHOWN.with_borrow(|shown| {
+            shown
+                .iter()
+                .filter(|(_, s)| s.window == label)
+                .map(|(webview, _)| webview.clone())
+                .collect()
+        });
+        for webview in gone {
+            remove(&webview);
+        }
     }
 }
 
-/// The view of the window `label` taken away, if one is shown (on the main thread).
+/// The view of the web view `label` taken away, if one is shown (on the main thread).
 fn remove(label: &str) {
     if let Some(shown) = SHOWN.with_borrow_mut(|shown| shown.remove(label)) {
         let observer: &AnyObject = (*shown.observer).as_ref();
@@ -276,13 +289,13 @@ fn remove(label: &str) {
 /// Find `text`, all its places marked: the first one, or `again` the next
 /// (or the one before, `backwards`). Whether found; an empty text clears.
 pub fn find<R: Runtime>(
-    window: WebviewWindow<R>,
+    webview: Webview<R>,
     text: String,
     again: bool,
     backwards: bool,
 ) -> Result<bool, String> {
-    let label = window.label().to_string();
-    on_main(&window, move |_| {
+    let label = webview.label().to_string();
+    on_main(&webview, move |_| {
         SHOWN.with_borrow(|shown| {
             let Some(Shown { view, document, .. }) = shown.get(&label) else {
                 return false;
@@ -337,9 +350,9 @@ unsafe fn redraw(view: &PDFView) {
 }
 
 /// In (1) or out (-1), or the width of the area (0).
-pub fn zoom<R: Runtime>(window: WebviewWindow<R>, step: i32) -> Result<(), String> {
-    let label = window.label().to_string();
-    on_main(&window, move |_| {
+pub fn zoom<R: Runtime>(webview: Webview<R>, step: i32) -> Result<(), String> {
+    let label = webview.label().to_string();
+    on_main(&webview, move |_| {
         SHOWN.with_borrow(|shown| {
             if let Some(Shown { view, .. }) = shown.get(&label) {
                 unsafe {
@@ -355,9 +368,9 @@ pub fn zoom<R: Runtime>(window: WebviewWindow<R>, step: i32) -> Result<(), Strin
 }
 
 /// Go to an entry of the outline, by its indices from the root.
-pub fn go<R: Runtime>(window: WebviewWindow<R>, target: Vec<usize>) -> Result<(), String> {
-    let label = window.label().to_string();
-    on_main(&window, move |_| {
+pub fn go<R: Runtime>(webview: Webview<R>, target: Vec<usize>) -> Result<(), String> {
+    let label = webview.label().to_string();
+    on_main(&webview, move |_| {
         SHOWN.with_borrow(|shown| {
             let Some(Shown { view, document, .. }) = shown.get(&label) else {
                 return;

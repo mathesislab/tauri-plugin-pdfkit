@@ -1,5 +1,5 @@
 //! A PDF in a native view of PDFKit, as Preview shows it, over an area of
-//! the page of a Tauri window (macOS). Elsewhere the commands fail: the page
+//! the page of a Tauri web view (macOS), one for each web view. Elsewhere the commands fail: the page
 //! shows the PDF itself (pdf.js).
 //!
 //! ```ignore
@@ -11,7 +11,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 use tauri::plugin::{self, TauriPlugin};
-use tauri::{AppHandle, Manager, RunEvent, Runtime, State, WebviewWindow, WindowEvent};
+use tauri::{AppHandle, Manager, RunEvent, Runtime, State, Webview, WindowEvent};
 
 #[cfg(target_os = "macos")]
 mod macos;
@@ -22,7 +22,7 @@ mod other;
 #[cfg(not(target_os = "macos"))]
 use other as platform;
 
-/// The event that tells the page of a window the page in view (from 1).
+/// The event that tells the page of a web view the page in view (from 1).
 pub const PAGE_EVENT: &str = "pdfkit:page";
 
 /// The area of the page where the PDF shows, in CSS pixels from the top left
@@ -59,8 +59,8 @@ type Factor<R> = Box<dyn Fn(&AppHandle<R>) -> f64 + Send + Sync>;
 struct Zoom<R: Runtime>(Factor<R>);
 
 impl<R: Runtime> Zoom<R> {
-    fn factor(&self, window: &WebviewWindow<R>) -> f64 {
-        (self.0)(window.app_handle())
+    fn factor(&self, webview: &Webview<R>) -> f64 {
+        (self.0)(webview.app_handle())
     }
 }
 
@@ -118,11 +118,11 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
 }
 
 /// Open `path` at `page` (from 1), over `frame`, in place of the PDF the
-/// window shows; hidden while a modal of the page is `covered`. `id` names it
+/// web view shows; hidden while a modal of the page is `covered`. `id` names it
 /// for `cover` and `close`.
 #[tauri::command]
 async fn open<R: Runtime>(
-    window: WebviewWindow<R>,
+    webview: Webview<R>,
     zoom: State<'_, Zoom<R>>,
     id: String,
     path: PathBuf,
@@ -130,54 +130,54 @@ async fn open<R: Runtime>(
     frame: Frame,
     covered: bool,
 ) -> Result<Opened, String> {
-    let zoom = zoom.factor(&window);
-    platform::open(window, id, path, page, frame, covered, zoom)
+    let zoom = zoom.factor(&webview);
+    platform::open(webview, id, path, page, frame, covered, zoom)
 }
 
 /// The area moved or changed size.
 #[tauri::command]
 async fn frame<R: Runtime>(
-    window: WebviewWindow<R>,
+    webview: Webview<R>,
     zoom: State<'_, Zoom<R>>,
     frame: Frame,
 ) -> Result<(), String> {
-    let zoom = zoom.factor(&window);
-    platform::set_frame(window, frame, zoom)
+    let zoom = zoom.factor(&webview);
+    platform::set_frame(webview, frame, zoom)
 }
 
 /// A modal of the page opened (`covered`) or closed: the view, which lies
 /// above all of the page, hides so that the modal shows and takes the keys.
 #[tauri::command]
-async fn cover<R: Runtime>(window: WebviewWindow<R>, id: String, covered: bool) -> Result<(), String> {
-    platform::cover(window, id, covered)
+async fn cover<R: Runtime>(webview: Webview<R>, id: String, covered: bool) -> Result<(), String> {
+    platform::cover(webview, id, covered)
 }
 
 /// The PDF `id` is not in front any more: its view goes.
 #[tauri::command]
-async fn close<R: Runtime>(window: WebviewWindow<R>, id: String) -> Result<(), String> {
-    platform::close(window, id)
+async fn close<R: Runtime>(webview: Webview<R>, id: String) -> Result<(), String> {
+    platform::close(webview, id)
 }
 
 /// Find `text`: the first place, or `again` the next (the one before,
 /// `backwards`). Whether found; an empty text clears.
 #[tauri::command]
 async fn find<R: Runtime>(
-    window: WebviewWindow<R>,
+    webview: Webview<R>,
     text: String,
     again: bool,
     backwards: bool,
 ) -> Result<bool, String> {
-    platform::find(window, text, again, backwards)
+    platform::find(webview, text, again, backwards)
 }
 
 /// In (1) or out (-1), or the width of the area (0).
 #[tauri::command]
-async fn zoom<R: Runtime>(window: WebviewWindow<R>, step: i32) -> Result<(), String> {
-    platform::zoom(window, step)
+async fn zoom<R: Runtime>(webview: Webview<R>, step: i32) -> Result<(), String> {
+    platform::zoom(webview, step)
 }
 
 /// Go to an entry of the outline, by its indices from the root.
 #[tauri::command]
-async fn go<R: Runtime>(window: WebviewWindow<R>, target: Vec<usize>) -> Result<(), String> {
-    platform::go(window, target)
+async fn go<R: Runtime>(webview: Webview<R>, target: Vec<usize>) -> Result<(), String> {
+    platform::go(webview, target)
 }

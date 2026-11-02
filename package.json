@@ -1,6 +1,6 @@
 {
   "name": "tauri-plugin-pdfkit-api",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "The commands of tauri-plugin-pdfkit: a PDF in a native PDFKit view over an area of the page (macOS)",
   "license": "MIT",
   "author": "Alexander Robinson",

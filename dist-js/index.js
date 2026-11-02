@@ -1,14 +1,14 @@
 // A PDF in a native view of PDFKit (macOS), over an area of the page: the
 // page keeps the area in place and drives the view through these commands.
 import { invoke } from "@tauri-apps/api/core";
-import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 /** The frame of an element of the page. */
 export function frameOf(el) {
     const box = el.getBoundingClientRect();
     return { x: box.left, y: box.top, width: box.width, height: box.height, viewport: window.innerHeight };
 }
 /** Open `path` at `page` (from 1) over `frame`, in place of the PDF the
- *  window shows; hidden while `covered`. `id` names it for `cover` and `close`. */
+ *  web view shows; hidden while `covered`. `id` names it for `cover` and `close`. */
 export function open(id, path, page, frame, covered = false) {
     return invoke("plugin:pdfkit|open", { id, path, page, frame, covered });
 }
@@ -38,7 +38,7 @@ export function zoom(step) {
 export function go(target) {
     return invoke("plugin:pdfkit|go", { target });
 }
-/** The page in view (from 1), as it changes, in this window. */
+/** The page in view (from 1), as it changes, in this web view. */
 export function onPage(handler) {
-    return getCurrentWebviewWindow().listen("pdfkit:page", (e) => handler(e.payload));
+    return getCurrentWebview().listen("pdfkit:page", (e) => handler(e.payload));
 }
