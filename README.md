@@ -18,11 +18,11 @@ where it began (`src-tauri/src/pdf_view.rs`), and
 ```toml
 # src-tauri/Cargo.toml
 [dependencies]
-tauri-plugin-pdfkit = { git = "https://github.com/mathesislab/tauri-plugin-pdfkit", tag = "v0.2.1" }
+tauri-plugin-pdfkit = { git = "https://github.com/mathesislab/tauri-plugin-pdfkit", tag = "v0.3.0" }
 ```
 
 ```bash
-npm install github:mathesislab/tauri-plugin-pdfkit#v0.2.1
+npm install github:mathesislab/tauri-plugin-pdfkit#v0.3.0
 ```
 
 The crate and the bindings go together: the same tag for both.
@@ -57,6 +57,7 @@ await close("paper-1");
 | `find(text, again, backwards)` | marks all the places, selects the first, the next or the one before; an empty text clears |
 | `zoom(step)` | in (1), out (-1), the width of the area (0) |
 | `go(target)` | goes to an entry of the outline |
+| `selection()` | the text selected, line by line: the page and label, the part selected in page points, and the words on the same band of the page outside it (the line numbers of a manuscript among them); null if nothing is selected |
 | `onPage(handler)` | the page in view, as it changes (event `pdfkit:page`, to the web view) |
 
 The views of a window go when the window is destroyed, and the view of a
@@ -64,6 +65,8 @@ web view when its page loads again.
 
 ## Versions
 
+- 0.3.0: `selection`, the text selected with the geometry to read the line
+  numbers printed in the margins.
 - 0.2.1: the view of a web view goes when its page loads again (a reload):
   nothing keeps it in place any more.
 - 0.2.0: the commands take the web view that calls them, not its window:

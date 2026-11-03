@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use tauri::{Runtime, Webview};
 
-use crate::{Frame, Opened};
+use crate::{Frame, Opened, Selection};
 
 const UNSUPPORTED: &str = "PDFKit: macOS only";
 
@@ -47,4 +47,8 @@ pub fn zoom<R: Runtime>(_: Webview<R>, _: i32) -> Result<(), String> {
 
 pub fn go<R: Runtime>(_: Webview<R>, _: Vec<usize>) -> Result<(), String> {
     Err(UNSUPPORTED.into())
+}
+
+pub fn selection<R: Runtime>(_: Webview<R>) -> Result<Option<Selection>, String> {
+    Ok(None)
 }

@@ -20,6 +20,36 @@ export type Opened = {
     count: number;
     outline: Entry[];
 };
+/** A rectangle of a page, in page points, the origin at the bottom left as
+ *  PDFKit has it (mirrors Rect). */
+export type Rect = {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+};
+/** A word of the page and the centre of its bounds (x, page points; mirrors
+ *  Run). */
+export type Run = {
+    text: string;
+    x: number;
+};
+/** A line of the selection: its page (from 1) and printed label ("" if none),
+ *  the part selected (page points, origin bottom left as PDFKit has it), and
+ *  the words on the same band of the page outside it, the line numbers printed
+ *  beside the text among them (mirrors Line). */
+export type Line = {
+    page: number;
+    label: string;
+    text: string;
+    bounds: Rect;
+    margin: Run[];
+};
+/** The text selected in the PDF, line by line (mirrors Selection). */
+export type Selection = {
+    text: string;
+    lines: Line[];
+};
 /** The frame of an element of the page. */
 export declare function frameOf(el: HTMLElement): Frame;
 /** Open `path` at `page` (from 1) over `frame`, in place of the PDF the
@@ -39,5 +69,8 @@ export declare function find(text: string, again?: boolean, backwards?: boolean)
 export declare function zoom(step: number): Promise<void>;
 /** Go to an entry of the outline. */
 export declare function go(target: number[]): Promise<void>;
+/** The text selected in the PDF, line by line, with the words beside each line
+ *  (the line numbers of a manuscript among them); null if nothing is selected. */
+export declare function selection(): Promise<Selection | null>;
 /** The page in view (from 1), as it changes, in this web view. */
 export declare function onPage(handler: (page: number) => void): Promise<UnlistenFn>;

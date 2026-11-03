@@ -11,6 +11,7 @@ All the commands of the PDF view
 - `allow-find`
 - `allow-zoom`
 - `allow-go`
+- `allow-selection`
 
 ## Permission Table
 
@@ -173,6 +174,32 @@ Enables the open command without any pre-configured scope.
 <td>
 
 Denies the open command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`pdfkit:allow-selection`
+
+</td>
+<td>
+
+Enables the selection command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`pdfkit:deny-selection`
+
+</td>
+<td>
+
+Denies the selection command without any pre-configured scope.
 
 </td>
 </tr>

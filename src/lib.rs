@@ -54,6 +54,43 @@ pub struct Opened {
     pub outline: Vec<Entry>,
 }
 
+/// A rectangle of a page, in page points, the origin at the bottom left as
+/// PDFKit has it.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+pub struct Rect {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
+/// A word of a page and the centre of its bounds (`x`, page points).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Run {
+    pub text: String,
+    pub x: f64,
+}
+
+/// A line of the selection: its `page` (from 1) and printed `label` (empty if
+/// none), the part selected (`text`, in `bounds`), and the words on the same
+/// band of the page outside it (`margin`), the line numbers printed beside the
+/// text among them.
+#[derive(Debug, Serialize)]
+pub struct Line {
+    pub page: usize,
+    pub label: String,
+    pub text: String,
+    pub bounds: Rect,
+    pub margin: Vec<Run>,
+}
+
+/// The text selected in the PDF, line by line.
+#[derive(Debug, Serialize)]
+pub struct Selection {
+    pub text: String,
+    pub lines: Vec<Line>,
+}
+
 type Factor<R> = Box<dyn Fn(&AppHandle<R>) -> f64 + Send + Sync>;
 
 /// The points of a CSS pixel.
@@ -93,7 +130,7 @@ impl<R: Runtime> Builder<R> {
         let factor = Zoom(self.zoom);
         plugin::Builder::new("pdfkit")
             .invoke_handler(tauri::generate_handler![
-                open, frame, cover, close, find, zoom, go
+                open, frame, cover, close, find, zoom, go, selection
             ])
             .setup(move |app, _| {
                 app.manage(factor);
@@ -188,4 +225,11 @@ async fn zoom<R: Runtime>(webview: Webview<R>, step: i32) -> Result<(), String> 
 #[tauri::command]
 async fn go<R: Runtime>(webview: Webview<R>, target: Vec<usize>) -> Result<(), String> {
     platform::go(webview, target)
+}
+
+/// The text selected in the PDF, line by line, with the words beside each line
+/// (the line numbers of a manuscript among them); none if nothing is selected.
+#[tauri::command]
+async fn selection<R: Runtime>(webview: Webview<R>) -> Result<Option<Selection>, String> {
+    platform::selection(webview)
 }

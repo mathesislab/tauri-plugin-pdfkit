@@ -367,6 +367,18 @@
           "markdownDescription": "Denies the open command without any pre-configured scope."
         },
         {
+          "description": "Enables the selection command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-selection",
+          "markdownDescription": "Enables the selection command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the selection command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-selection",
+          "markdownDescription": "Denies the selection command without any pre-configured scope."
+        },
+        {
           "description": "Enables the zoom command without any pre-configured scope.",
           "type": "string",
           "const": "allow-zoom",
@@ -379,10 +391,10 @@
           "markdownDescription": "Denies the zoom command without any pre-configured scope."
         },
         {
-          "description": "All the commands of the PDF view\n#### This default permission set includes:\n\n- `allow-open`\n- `allow-frame`\n- `allow-cover`\n- `allow-close`\n- `allow-find`\n- `allow-zoom`\n- `allow-go`",
+          "description": "All the commands of the PDF view\n#### This default permission set includes:\n\n- `allow-open`\n- `allow-frame`\n- `allow-cover`\n- `allow-close`\n- `allow-find`\n- `allow-zoom`\n- `allow-go`\n- `allow-selection`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "All the commands of the PDF view\n#### This default permission set includes:\n\n- `allow-open`\n- `allow-frame`\n- `allow-cover`\n- `allow-close`\n- `allow-find`\n- `allow-zoom`\n- `allow-go`"
+          "markdownDescription": "All the commands of the PDF view\n#### This default permission set includes:\n\n- `allow-open`\n- `allow-frame`\n- `allow-cover`\n- `allow-close`\n- `allow-find`\n- `allow-zoom`\n- `allow-go`\n- `allow-selection`"
         }
       ]
     }
