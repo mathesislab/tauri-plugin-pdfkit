@@ -3159,7 +3159,7 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-pdfkit"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "block2",
  "objc2",
