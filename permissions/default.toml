@@ -10,5 +10,9 @@ permissions = [
   "allow-find",
   "allow-zoom",
   "allow-go",
+  "allow-back",
+  "allow-forward",
+  "allow-page-to",
+  "allow-turn",
   "allow-selection",
 ]

@@ -6,6 +6,10 @@ const COMMANDS: &[&str] = &[
     "find",
     "zoom",
     "go",
+    "back",
+    "forward",
+    "page_to",
+    "turn",
     "selection",
 ];
 

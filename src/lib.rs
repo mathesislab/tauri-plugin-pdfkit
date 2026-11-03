@@ -26,6 +26,28 @@ use other as platform;
 /// The event that tells the page of a web view the page in view (from 1).
 pub const PAGE_EVENT: &str = "pdfkit:page";
 
+/// The event that tells the page of a web view the history of the PDF (a
+/// `History`), when it changes.
+pub const HISTORY_EVENT: &str = "pdfkit:history";
+
+/// Whether there is a page to go back to (the one a link or a jump left), or
+/// forward (after going back).
+#[derive(Debug, Default, Clone, Copy, PartialEq, Serialize)]
+pub struct History {
+    pub back: bool,
+    pub forward: bool,
+}
+
+/// Where to turn from the page in view.
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Turn {
+    First,
+    Previous,
+    Next,
+    Last,
+}
+
 /// The area of the page where the PDF shows, in CSS pixels from the top left
 /// of its viewport, and the height of the viewport: the web view may also lie
 /// under the title bar, and the page start below it.
@@ -130,7 +152,7 @@ impl<R: Runtime> Builder<R> {
         let factor = Zoom(self.zoom);
         plugin::Builder::new("pdfkit")
             .invoke_handler(tauri::generate_handler![
-                open, frame, cover, close, find, zoom, go, selection
+                open, frame, cover, close, find, zoom, go, back, forward, page_to, turn, selection
             ])
             .setup(move |app, _| {
                 app.manage(factor);
@@ -225,6 +247,30 @@ async fn zoom<R: Runtime>(webview: Webview<R>, step: i32) -> Result<(), String> 
 #[tauri::command]
 async fn go<R: Runtime>(webview: Webview<R>, target: Vec<usize>) -> Result<(), String> {
     platform::go(webview, target)
+}
+
+/// Back to the page the last link or jump left (see `History`).
+#[tauri::command]
+async fn back<R: Runtime>(webview: Webview<R>) -> Result<(), String> {
+    platform::back(webview, false)
+}
+
+/// Forward again, after going back.
+#[tauri::command]
+async fn forward<R: Runtime>(webview: Webview<R>) -> Result<(), String> {
+    platform::back(webview, true)
+}
+
+/// Go to `page` (from 1; the last, if beyond it).
+#[tauri::command]
+async fn page_to<R: Runtime>(webview: Webview<R>, page: usize) -> Result<(), String> {
+    platform::page_to(webview, page)
+}
+
+/// Turn to the first, previous, next or last page.
+#[tauri::command]
+async fn turn<R: Runtime>(webview: Webview<R>, to: Turn) -> Result<(), String> {
+    platform::turn(webview, to)
 }
 
 /// The text selected in the PDF, line by line, with the words beside each line

@@ -38,6 +38,22 @@ export function zoom(step) {
 export function go(target) {
     return invoke("plugin:pdfkit|go", { target });
 }
+/** Back to the page the last link or jump left (see `onHistory`). */
+export function back() {
+    return invoke("plugin:pdfkit|back");
+}
+/** Forward again, after going back. */
+export function forward() {
+    return invoke("plugin:pdfkit|forward");
+}
+/** Go to `page` (from 1; the last, if beyond it). */
+export function pageTo(page) {
+    return invoke("plugin:pdfkit|page_to", { page });
+}
+/** Turn to the first, previous, next or last page. */
+export function turn(to) {
+    return invoke("plugin:pdfkit|turn", { to });
+}
 /** The text selected in the PDF, line by line, with the words beside each line
  *  (the line numbers of a manuscript among them); null if nothing is selected. */
 export function selection() {
@@ -46,4 +62,8 @@ export function selection() {
 /** The page in view (from 1), as it changes, in this web view. */
 export function onPage(handler) {
     return getCurrentWebview().listen("pdfkit:page", (e) => handler(e.payload));
+}
+/** The history, when it changes, in this web view. */
+export function onHistory(handler) {
+    return getCurrentWebview().listen("pdfkit:history", (e) => handler(e.payload));
 }

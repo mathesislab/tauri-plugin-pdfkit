@@ -33,6 +33,13 @@ export type Line = { page: number; label: string; text: string; bounds: Rect; ma
 /** The text selected in the PDF, line by line (mirrors Selection). */
 export type Selection = { text: string; lines: Line[] };
 
+/** Whether there is a page to go back to (the one a link or a jump left), or
+ *  forward (after going back; mirrors History). */
+export type History = { back: boolean; forward: boolean };
+
+/** Where to turn from the page in view (mirrors Turn). */
+export type Turn = "first" | "previous" | "next" | "last";
+
 /** The frame of an element of the page. */
 export function frameOf(el: HTMLElement): Frame {
   const box = el.getBoundingClientRect();
@@ -77,6 +84,26 @@ export function go(target: number[]): Promise<void> {
   return invoke("plugin:pdfkit|go", { target });
 }
 
+/** Back to the page the last link or jump left (see `onHistory`). */
+export function back(): Promise<void> {
+  return invoke("plugin:pdfkit|back");
+}
+
+/** Forward again, after going back. */
+export function forward(): Promise<void> {
+  return invoke("plugin:pdfkit|forward");
+}
+
+/** Go to `page` (from 1; the last, if beyond it). */
+export function pageTo(page: number): Promise<void> {
+  return invoke("plugin:pdfkit|page_to", { page });
+}
+
+/** Turn to the first, previous, next or last page. */
+export function turn(to: Turn): Promise<void> {
+  return invoke("plugin:pdfkit|turn", { to });
+}
+
 /** The text selected in the PDF, line by line, with the words beside each line
  *  (the line numbers of a manuscript among them); null if nothing is selected. */
 export function selection(): Promise<Selection | null> {
@@ -86,4 +113,9 @@ export function selection(): Promise<Selection | null> {
 /** The page in view (from 1), as it changes, in this web view. */
 export function onPage(handler: (page: number) => void): Promise<UnlistenFn> {
   return getCurrentWebview().listen<number>("pdfkit:page", (e) => handler(e.payload));
+}
+
+/** The history, when it changes, in this web view. */
+export function onHistory(handler: (history: History) => void): Promise<UnlistenFn> {
+  return getCurrentWebview().listen<History>("pdfkit:history", (e) => handler(e.payload));
 }

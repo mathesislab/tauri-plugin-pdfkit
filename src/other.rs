@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use tauri::{Runtime, Webview};
 
-use crate::{Frame, Opened, Selection};
+use crate::{Frame, Opened, Selection, Turn};
 
 const UNSUPPORTED: &str = "PDFKit: macOS only";
 
@@ -46,6 +46,18 @@ pub fn zoom<R: Runtime>(_: Webview<R>, _: i32) -> Result<(), String> {
 }
 
 pub fn go<R: Runtime>(_: Webview<R>, _: Vec<usize>) -> Result<(), String> {
+    Err(UNSUPPORTED.into())
+}
+
+pub fn back<R: Runtime>(_: Webview<R>, _: bool) -> Result<(), String> {
+    Err(UNSUPPORTED.into())
+}
+
+pub fn page_to<R: Runtime>(_: Webview<R>, _: usize) -> Result<(), String> {
+    Err(UNSUPPORTED.into())
+}
+
+pub fn turn<R: Runtime>(_: Webview<R>, _: Turn) -> Result<(), String> {
     Err(UNSUPPORTED.into())
 }
 

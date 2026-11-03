@@ -3,11 +3,12 @@
 //! is and drives the view: find, zoom, the outline; the view tells it of the
 //! page in view. One view per web view: a window may hold several.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::ops::Range;
 use std::path::PathBuf;
 use std::ptr::NonNull;
+use std::rc::Rc;
 use std::sync::mpsc;
 
 use block2::RcBlock;
@@ -21,20 +22,23 @@ use objc2_foundation::{
 };
 use objc2_pdf_kit::{
     PDFDisplayMode, PDFDocument, PDFOutline, PDFPage, PDFSelection, PDFView,
-    PDFViewPageChangedNotification,
+    PDFViewChangedHistoryNotification, PDFViewPageChangedNotification,
 };
 use tauri::{Emitter, EventTarget, Runtime, Webview};
 
-use crate::{Entry, Frame, Line, Opened, PAGE_EVENT, Rect, Run, Selection};
+use crate::{
+    Entry, Frame, HISTORY_EVENT, History, Line, Opened, PAGE_EVENT, Rect, Run, Selection, Turn,
+};
 
-/// The PDF shown in a web view, with what tells the page of the page in view.
+/// The PDF shown in a web view, with what tells the page of the page in view
+/// and of its history.
 struct Shown {
     id: String,
     /// the label of the window of the web view
     window: String,
     view: Retained<PDFView>,
     document: Retained<PDFDocument>,
-    observer: Retained<ProtocolObject<dyn NSObjectProtocol>>,
+    observers: Vec<Retained<ProtocolObject<dyn NSObjectProtocol>>>,
 }
 
 thread_local! {
@@ -120,7 +124,7 @@ pub fn open<R: Runtime>(
         if !covered && let Some(window) = view.window() {
             window.makeFirstResponder(Some(&view));
         }
-        let observer = observe(handle, &view, &document);
+        let observers = observe(handle, &view, &document);
         let opened = Opened {
             count: unsafe { document.pageCount() },
             outline: unsafe { document.outlineRoot() }
@@ -135,7 +139,7 @@ pub fn open<R: Runtime>(
                     window,
                     view,
                     document,
-                    observer,
+                    observers,
                 },
             )
         });
@@ -143,28 +147,58 @@ pub fn open<R: Runtime>(
     })?
 }
 
-/// The page in view, told to the page of the web view as it changes (the
-/// notification comes on the main thread, where the view is).
+/// The page in view and the history (whether there is a page to go back to,
+/// or forward), told to the page of the web view as they change (the
+/// notifications come on the main thread, where the view is).
 fn observe<R: Runtime>(
     webview: Webview<R>,
     view: &Retained<PDFView>,
     document: &Retained<PDFDocument>,
-) -> Retained<ProtocolObject<dyn NSObjectProtocol>> {
-    let (shown, doc) = (view.clone(), document.clone());
+) -> Vec<Retained<ProtocolObject<dyn NSObjectProtocol>>> {
     let target = EventTarget::webview(webview.label());
-    let block = RcBlock::new(move |_: NonNull<NSNotification>| {
-        if let Some(page) = unsafe { shown.currentPage() } {
-            let index = unsafe { doc.indexForPage(&page) };
-            let _ = webview.emit_to(target.clone(), PAGE_EVENT, index + 1);
+    // the history the page was told last: told again only when it changes
+    let told = Rc::new(Cell::new(History::default()));
+    let history = {
+        let (webview, shown, target, told) =
+            (webview.clone(), view.clone(), target.clone(), told.clone());
+        move || {
+            let now = History {
+                back: unsafe { shown.canGoBack() },
+                forward: unsafe { shown.canGoForward() },
+            };
+            if told.replace(now) != now {
+                let _ = webview.emit_to(target.clone(), HISTORY_EVENT, now);
+            }
         }
-    });
+    };
+    let on_page = {
+        let (shown, doc, history) = (view.clone(), document.clone(), history.clone());
+        RcBlock::new(move |_: NonNull<NSNotification>| {
+            if let Some(page) = unsafe { shown.currentPage() } {
+                let index = unsafe { doc.indexForPage(&page) };
+                let _ = webview.emit_to(target.clone(), PAGE_EVENT, index + 1);
+            }
+            // a link followed changes the page and the history together
+            history();
+        })
+    };
+    let on_history = RcBlock::new(move |_: NonNull<NSNotification>| history());
+    let center = NSNotificationCenter::defaultCenter();
     unsafe {
-        NSNotificationCenter::defaultCenter().addObserverForName_object_queue_usingBlock(
-            Some(PDFViewPageChangedNotification),
-            Some(view),
-            None,
-            &block,
-        )
+        vec![
+            center.addObserverForName_object_queue_usingBlock(
+                Some(PDFViewPageChangedNotification),
+                Some(view),
+                None,
+                &on_page,
+            ),
+            center.addObserverForName_object_queue_usingBlock(
+                Some(PDFViewChangedHistoryNotification),
+                Some(view),
+                None,
+                &on_history,
+            ),
+        ]
     }
 }
 
@@ -286,8 +320,10 @@ pub fn unload<R: Runtime>(webview: &Webview<R>) {
 /// The view of the web view `label` taken away, if one is shown (on the main thread).
 fn remove(label: &str) {
     if let Some(shown) = SHOWN.with_borrow_mut(|shown| shown.remove(label)) {
-        let observer: &AnyObject = (*shown.observer).as_ref();
-        unsafe { NSNotificationCenter::defaultCenter().removeObserver(observer) };
+        for observer in &shown.observers {
+            let observer: &AnyObject = (**observer).as_ref();
+            unsafe { NSNotificationCenter::defaultCenter().removeObserver(observer) };
+        }
         // the keys go back to the page
         let page = unsafe { shown.view.superview() };
         shown.view.removeFromSuperview();
@@ -395,6 +431,61 @@ pub fn go<R: Runtime>(webview: Webview<R>, target: Vec<usize>) -> Result<(), Str
                 }
                 if let Some(destination) = entry.and_then(|e| e.destination()) {
                     view.goToDestination(&destination);
+                }
+            }
+        });
+    })
+}
+
+/// Back to the page the last link or jump came from (`forward`: undone).
+pub fn back<R: Runtime>(webview: Webview<R>, forward: bool) -> Result<(), String> {
+    let label = webview.label().to_string();
+    on_main(&webview, move |_| {
+        SHOWN.with_borrow(|shown| {
+            if let Some(Shown { view, .. }) = shown.get(&label) {
+                unsafe {
+                    if forward {
+                        view.goForward(None)
+                    } else {
+                        view.goBack(None)
+                    }
+                }
+            }
+        });
+    })
+}
+
+/// Go to `page` (from 1), kept to the pages there are.
+pub fn page_to<R: Runtime>(webview: Webview<R>, page: usize) -> Result<(), String> {
+    let label = webview.label().to_string();
+    on_main(&webview, move |_| {
+        SHOWN.with_borrow(|shown| {
+            let Some(Shown { view, document, .. }) = shown.get(&label) else {
+                return;
+            };
+            unsafe {
+                let last = document.pageCount().saturating_sub(1);
+                if let Some(page) = document.pageAtIndex(page.saturating_sub(1).min(last)) {
+                    view.goToPage(&page);
+                }
+            }
+        });
+    })
+}
+
+/// Turn to the first, previous, next or last page.
+pub fn turn<R: Runtime>(webview: Webview<R>, to: Turn) -> Result<(), String> {
+    let label = webview.label().to_string();
+    on_main(&webview, move |_| {
+        SHOWN.with_borrow(|shown| {
+            if let Some(Shown { view, .. }) = shown.get(&label) {
+                unsafe {
+                    match to {
+                        Turn::First => view.goToFirstPage(None),
+                        Turn::Previous => view.goToPreviousPage(None),
+                        Turn::Next => view.goToNextPage(None),
+                        Turn::Last => view.goToLastPage(None),
+                    }
                 }
             }
         });

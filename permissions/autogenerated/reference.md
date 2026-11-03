@@ -11,6 +11,10 @@ All the commands of the PDF view
 - `allow-find`
 - `allow-zoom`
 - `allow-go`
+- `allow-back`
+- `allow-forward`
+- `allow-page-to`
+- `allow-turn`
 - `allow-selection`
 
 ## Permission Table
@@ -21,6 +25,32 @@ All the commands of the PDF view
 <th>Description</th>
 </tr>
 
+
+<tr>
+<td>
+
+`pdfkit:allow-back`
+
+</td>
+<td>
+
+Enables the back command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`pdfkit:deny-back`
+
+</td>
+<td>
+
+Denies the back command without any pre-configured scope.
+
+</td>
+</tr>
 
 <tr>
 <td>
@@ -96,6 +126,32 @@ Enables the find command without any pre-configured scope.
 <td>
 
 Denies the find command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`pdfkit:allow-forward`
+
+</td>
+<td>
+
+Enables the forward command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`pdfkit:deny-forward`
+
+</td>
+<td>
+
+Denies the forward command without any pre-configured scope.
 
 </td>
 </tr>
@@ -181,6 +237,32 @@ Denies the open command without any pre-configured scope.
 <tr>
 <td>
 
+`pdfkit:allow-page-to`
+
+</td>
+<td>
+
+Enables the page_to command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`pdfkit:deny-page-to`
+
+</td>
+<td>
+
+Denies the page_to command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `pdfkit:allow-selection`
 
 </td>
@@ -200,6 +282,32 @@ Enables the selection command without any pre-configured scope.
 <td>
 
 Denies the selection command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`pdfkit:allow-turn`
+
+</td>
+<td>
+
+Enables the turn command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`pdfkit:deny-turn`
+
+</td>
+<td>
+
+Denies the turn command without any pre-configured scope.
 
 </td>
 </tr>

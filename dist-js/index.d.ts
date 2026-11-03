@@ -50,6 +50,14 @@ export type Selection = {
     text: string;
     lines: Line[];
 };
+/** Whether there is a page to go back to (the one a link or a jump left), or
+ *  forward (after going back; mirrors History). */
+export type History = {
+    back: boolean;
+    forward: boolean;
+};
+/** Where to turn from the page in view (mirrors Turn). */
+export type Turn = "first" | "previous" | "next" | "last";
 /** The frame of an element of the page. */
 export declare function frameOf(el: HTMLElement): Frame;
 /** Open `path` at `page` (from 1) over `frame`, in place of the PDF the
@@ -69,8 +77,18 @@ export declare function find(text: string, again?: boolean, backwards?: boolean)
 export declare function zoom(step: number): Promise<void>;
 /** Go to an entry of the outline. */
 export declare function go(target: number[]): Promise<void>;
+/** Back to the page the last link or jump left (see `onHistory`). */
+export declare function back(): Promise<void>;
+/** Forward again, after going back. */
+export declare function forward(): Promise<void>;
+/** Go to `page` (from 1; the last, if beyond it). */
+export declare function pageTo(page: number): Promise<void>;
+/** Turn to the first, previous, next or last page. */
+export declare function turn(to: Turn): Promise<void>;
 /** The text selected in the PDF, line by line, with the words beside each line
  *  (the line numbers of a manuscript among them); null if nothing is selected. */
 export declare function selection(): Promise<Selection | null>;
 /** The page in view (from 1), as it changes, in this web view. */
 export declare function onPage(handler: (page: number) => void): Promise<UnlistenFn>;
+/** The history, when it changes, in this web view. */
+export declare function onHistory(handler: (history: History) => void): Promise<UnlistenFn>;
