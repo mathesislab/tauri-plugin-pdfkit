@@ -106,11 +106,25 @@ pub struct Line {
     pub margin: Vec<Run>,
 }
 
-/// The text selected in the PDF, line by line.
+/// A whole number standing alone on a page (`n`, of up to five digits), and
+/// the centre of its bounds: a line number printed in the margin, a page
+/// number, or a number in the text.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Mark {
+    pub page: usize,
+    pub n: u32,
+    pub x: f64,
+    pub y: f64,
+}
+
+/// The text selected in the PDF, line by line, and the numbers standing alone
+/// on its pages (`numbers`): with them, the line number of a line that has none
+/// printed beside it (a manuscript numbered every fifth line).
 #[derive(Debug, Serialize)]
 pub struct Selection {
     pub text: String,
     pub lines: Vec<Line>,
+    pub numbers: Vec<Mark>,
 }
 
 type Factor<R> = Box<dyn Fn(&AppHandle<R>) -> f64 + Send + Sync>;

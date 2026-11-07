@@ -27,7 +27,8 @@ use objc2_pdf_kit::{
 use tauri::{Emitter, EventTarget, Runtime, Webview};
 
 use crate::{
-    Entry, Frame, HISTORY_EVENT, History, Line, Opened, PAGE_EVENT, Rect, Run, Selection, Turn,
+    Entry, Frame, HISTORY_EVENT, History, Line, Mark, Opened, PAGE_EVENT, Rect, Run, Selection,
+    Turn,
 };
 
 /// The PDF shown in a web view, with what tells the page of the page in view
@@ -505,21 +506,23 @@ pub fn selection<R: Runtime>(webview: Webview<R>) -> Result<Option<Selection>, S
                 if text.is_empty() {
                     return None;
                 }
+                let (lines, numbers) = lines(&current, document);
                 Some(Selection {
                     text,
-                    lines: lines(&current, document),
+                    lines,
+                    numbers,
                 })
             }
         })
     })
 }
 
-/// The lines of a selection, each on its first page; those without text are
-/// left out.
-unsafe fn lines(selection: &PDFSelection, document: &PDFDocument) -> Vec<Line> {
+/// The lines of a selection, each on its first page (those without text are
+/// left out), and the numbers standing alone on the pages they lie on.
+unsafe fn lines(selection: &PDFSelection, document: &PDFDocument) -> (Vec<Line>, Vec<Mark>) {
     // the text of each page, read once
     let mut pages: HashMap<usize, Text> = HashMap::new();
-    unsafe { selection.selectionsByLine() }
+    let lines: Vec<Line> = unsafe { selection.selectionsByLine() }
         .iter()
         .filter_map(|line| unsafe {
             let page = line.pages().firstObject()?;
@@ -534,7 +537,13 @@ unsafe fn lines(selection: &PDFSelection, document: &PDFDocument) -> Vec<Line> {
                 margin: text.margin(bounds),
             })
         })
-        .collect()
+        .collect();
+    let mut numbers: Vec<Mark> = pages
+        .iter()
+        .flat_map(|(&index, text)| text.numbers(index + 1))
+        .collect();
+    numbers.sort_by(|a, b| a.page.cmp(&b.page).then(b.y.total_cmp(&a.y)));
+    (lines, numbers)
 }
 
 /// A stretch of the string of a page without white space, in one piece on the
@@ -618,6 +627,28 @@ impl Text {
         }
         let text = texts.join(" ").trim().to_string();
         (!text.is_empty()).then_some((text, bounds?))
+    }
+
+    /// The whole numbers of up to five digits standing alone on the page (a
+    /// part of digits only: a word, or a number glued to a word but apart from
+    /// it), each with the centre of its bounds.
+    fn numbers(&self, page: usize) -> Vec<Mark> {
+        self.parts
+            .iter()
+            .filter_map(|part| {
+                let units = &self.units[part.range.clone()];
+                if units.is_empty() || units.len() > 5 || !units.iter().all(|&u| is_digit(u)) {
+                    return None;
+                }
+                let r = part.bounds;
+                Some(Mark {
+                    page,
+                    n: String::from_utf16_lossy(units).parse().ok()?,
+                    x: r.x + r.width / 2.0,
+                    y: r.y + r.height / 2.0,
+                })
+            })
+            .collect()
     }
 
     /// The words on the band of the page at the vertical extent of `bounds`
@@ -865,6 +896,25 @@ mod tests {
     }
 
     #[test]
+    fn the_numbers_of_a_page_are_its_parts_of_digits_alone() {
+        // "12 in H2O gravida10 123456", the 10 glued to gravida but apart
+        let text = Text {
+            units: units("12 in H2O gravida10 123456"),
+            parts: vec![
+                part(0..2, rect(40.0, 101.0, 10.0, 8.0), false),
+                part(3..5, rect(140.0, 100.0, 20.0, 10.0), false),
+                part(6..9, rect(170.0, 100.0, 20.0, 10.0), false),
+                part(10..17, rect(200.0, 100.0, 40.0, 10.0), false),
+                part(17..19, rect(20.0, 90.0, 10.0, 8.0), true),
+                part(20..26, rect(250.0, 100.0, 30.0, 10.0), false),
+            ],
+        };
+        let seen: Vec<(u32, f64, f64)> = text.numbers(3).iter().map(|m| (m.n, m.x, m.y)).collect();
+        assert_eq!(seen, [(12, 45.0, 105.0), (10, 25.0, 94.0)]);
+        assert!(text.numbers(3).iter().all(|m| m.page == 3));
+    }
+
+    #[test]
     fn union_of_rects() {
         let whole = union(rect(0.0, 0.0, 10.0, 10.0), rect(20.0, 5.0, 5.0, 10.0));
         assert_eq!(whole, rect(0.0, 0.0, 25.0, 15.0));
@@ -892,11 +942,12 @@ mod tests {
             if std::env::var("PDFKIT_TEST_LINE").is_ok() {
                 found.extendSelectionForLineBoundaries();
             }
-            let lines = lines(&found, &document);
+            let (lines, numbers) = lines(&found, &document);
             assert!(!lines.is_empty());
             for line in lines {
                 println!("{line:#?}");
             }
+            println!("{numbers:?}");
         }
     }
 }

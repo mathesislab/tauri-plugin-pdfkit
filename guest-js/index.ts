@@ -30,8 +30,15 @@ export type Run = { text: string; x: number };
  *  beside the text among them (mirrors Line). */
 export type Line = { page: number; label: string; text: string; bounds: Rect; margin: Run[] };
 
-/** The text selected in the PDF, line by line (mirrors Selection). */
-export type Selection = { text: string; lines: Line[] };
+/** A whole number standing alone on a page, and the centre of its bounds
+ *  (page points): a line number printed in the margin, a page number, or a
+ *  number in the text (mirrors Mark). */
+export type Mark = { page: number; n: number; x: number; y: number };
+
+/** The text selected in the PDF, line by line, and the numbers standing alone
+ *  on its pages, top to bottom: with them, the line number of a line that has
+ *  none printed beside it (mirrors Selection). */
+export type Selection = { text: string; lines: Line[]; numbers: Mark[] };
 
 /** Whether there is a page to go back to (the one a link or a jump left), or
  *  forward (after going back; mirrors History). */

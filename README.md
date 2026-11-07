@@ -60,7 +60,7 @@ await close("paper-1");
 | `back()`, `forward()` | back to the page the last link or jump left, and forward again |
 | `pageTo(page)` | goes to `page` (from 1) |
 | `turn(to)` | the `first`, `previous`, `next` or `last` page |
-| `selection()` | the text selected, line by line: the page and label, the part selected in page points, and the words on the same band of the page outside it (the line numbers of a manuscript among them); null if nothing is selected |
+| `selection()` | the text selected, line by line: the page and label, the part selected in page points, and the words on the same band of the page outside it (the line numbers of a manuscript among them), and the numbers standing alone on its pages with their place (a manuscript numbered every fifth line); null if nothing is selected |
 | `onPage(handler)` | the page in view, as it changes (event `pdfkit:page`, to the web view) |
 | `onHistory(handler)` | `{ back, forward }`, whether there is a page to go back to or forward, as it changes (event `pdfkit:history`) |
 
@@ -69,6 +69,9 @@ web view when its page loads again.
 
 ## Versions
 
+- 0.5.0: `selection` gives the numbers standing alone on the pages of the
+  selection too (`numbers`), for the line numbers of the lines that have none
+  printed beside them.
 - 0.4.0: `back`, `forward`, `pageTo`, `turn`, and the history told to the
   page (`onHistory`): a link followed in the PDF can be gone back from.
 - 0.3.0: `selection`, the text selected with the geometry to read the line
