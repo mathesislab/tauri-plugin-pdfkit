@@ -30,6 +30,10 @@ pub const PAGE_EVENT: &str = "pdfkit:page";
 /// `History`), when it changes.
 pub const HISTORY_EVENT: &str = "pdfkit:history";
 
+/// The event that tells the page of a web view of a ⌘-click or a right-click
+/// on its PDF (a `Click`).
+pub const CLICK_EVENT: &str = "pdfkit:click";
+
 /// Whether there is a page to go back to (the one a link or a jump left), or
 /// forward (after going back).
 #[derive(Debug, Default, Clone, Copy, PartialEq, Serialize)]
@@ -143,6 +147,25 @@ pub struct Place {
     pub text: String,
     pub index: Option<usize>,
     pub line: Option<[usize; 2]>,
+}
+
+/// A point of the page of a web view, in CSS pixels from the top left of its
+/// viewport (as a mouse event's `clientX` and `clientY`).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+pub struct Point {
+    pub x: f64,
+    pub y: f64,
+}
+
+/// A ⌘-click on the PDF, or a right-click (`menu`: PDFKit shows no menu of its
+/// own, for the page to show its own at `client`): the place clicked (none off
+/// the pages) and the text selected (empty if none).
+#[derive(Debug, Clone, Serialize)]
+pub struct Click {
+    pub menu: bool,
+    pub client: Point,
+    pub place: Option<Place>,
+    pub selected: String,
 }
 
 type Factor<R> = Box<dyn Fn(&AppHandle<R>) -> f64 + Send + Sync>;

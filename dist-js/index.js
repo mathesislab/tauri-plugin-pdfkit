@@ -77,3 +77,7 @@ export function onPage(handler) {
 export function onHistory(handler) {
     return getCurrentWebview().listen("pdfkit:history", (e) => handler(e.payload));
 }
+/** A ⌘-click or a right-click on the PDF, in this web view. */
+export function onClick(handler) {
+    return getCurrentWebview().listen("pdfkit:click", (e) => handler(e.payload));
+}

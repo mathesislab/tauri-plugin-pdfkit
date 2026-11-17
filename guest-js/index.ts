@@ -51,6 +51,15 @@ export type History = { back: boolean; forward: boolean };
  *  Place). */
 export type Place = { page: number; x: number; y: number; text: string; index: number | null; line: [number, number] | null };
 
+/** A point of the page, in CSS pixels from the top left of its viewport, as a
+ *  mouse event's clientX and clientY (mirrors Point). */
+export type Point = { x: number; y: number };
+
+/** A ⌘-click on the PDF, or a right-click (`menu`: PDFKit shows no menu of its
+ *  own, for the page to show its own at `client`): the place clicked (null off
+ *  the pages) and the text selected ("" if none; mirrors Click). */
+export type Click = { menu: boolean; client: Point; place: Place | null; selected: string };
+
 /** Where to turn from the page in view (mirrors Turn). */
 export type Turn = "first" | "previous" | "next" | "last";
 
@@ -144,4 +153,9 @@ export function onPage(handler: (page: number) => void): Promise<UnlistenFn> {
 /** The history, when it changes, in this web view. */
 export function onHistory(handler: (history: History) => void): Promise<UnlistenFn> {
   return getCurrentWebview().listen<History>("pdfkit:history", (e) => handler(e.payload));
+}
+
+/** A ⌘-click or a right-click on the PDF, in this web view. */
+export function onClick(handler: (click: Click) => void): Promise<UnlistenFn> {
+  return getCurrentWebview().listen<Click>("pdfkit:click", (e) => handler(e.payload));
 }

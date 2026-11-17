@@ -13,9 +13,11 @@ use std::sync::mpsc;
 
 use block2::RcBlock;
 use objc2::rc::Retained;
-use objc2::runtime::{AnyObject, NSObjectProtocol, ProtocolObject};
-use objc2::{AnyThread, MainThreadMarker, MainThreadOnly};
-use objc2_app_kit::{NSColor, NSView, NSWindowOrderingMode};
+use objc2::runtime::{AnyObject, NSObject, NSObjectProtocol, ProtocolObject};
+use objc2::{AnyThread, DefinedClass, MainThreadMarker, MainThreadOnly, define_class, msg_send};
+use objc2_app_kit::{
+    NSColor, NSEvent, NSEventModifierFlags, NSMenu, NSResponder, NSView, NSWindowOrderingMode,
+};
 use objc2_foundation::{
     NSArray, NSEdgeInsets, NSNotification, NSNotificationCenter, NSPoint, NSRange, NSRect, NSSize,
     NSString, NSStringCompareOptions, NSURL,
@@ -27,8 +29,8 @@ use objc2_pdf_kit::{
 use tauri::{Emitter, EventTarget, Runtime, Webview};
 
 use crate::{
-    Entry, Frame, HISTORY_EVENT, History, Line, Mark, Opened, PAGE_EVENT, Place, Rect, Run,
-    Selection, Turn,
+    CLICK_EVENT, Click, Entry, Frame, HISTORY_EVENT, History, Line, Mark, Opened, PAGE_EVENT,
+    Place, Point, Rect, Run, Selection, Turn,
 };
 
 /// The PDF shown in a web view, with what tells the page of the page in view
@@ -37,9 +39,121 @@ struct Shown {
     id: String,
     /// the label of the window of the web view
     window: String,
-    view: Retained<PDFView>,
+    view: Retained<View>,
     document: Retained<PDFDocument>,
     observers: Vec<Retained<ProtocolObject<dyn NSObjectProtocol>>>,
+}
+
+/// What the view keeps: what tells the page of a click (`tell`), the layout of
+/// the page to say where (the points of a CSS pixel, the height of its
+/// viewport in CSS pixels), and whether `mark` marked a place, which the next
+/// click takes away.
+struct Ivars {
+    tell: Box<dyn Fn(Click)>,
+    layout: Cell<(f64, f64)>,
+    marked: Cell<bool>,
+}
+
+define_class!(
+    // SAFETY: PDFView may be subclassed (Skim's view is one); View has no Drop.
+    #[unsafe(super(PDFView, NSView, NSResponder, NSObject))]
+    #[thread_kind = MainThreadOnly]
+    #[name = "TauriPluginPdfkitView"]
+    #[ivars = Ivars]
+    /// PDFKit's view, which tells the page of a ⌘-click and of a right-click.
+    struct View;
+
+    impl View {
+        /// A ⌘-click told to the page; any other click takes the mark away
+        /// and is PDFKit's.
+        #[unsafe(method(mouseDown:))]
+        fn mouse_down(&self, event: &NSEvent) {
+            if event.modifierFlags().contains(NSEventModifierFlags::Command) {
+                (self.ivars().tell)(self.click(event, false));
+                return;
+            }
+            self.unmark();
+            let _: () = unsafe { msg_send![super(self), mouseDown: event] };
+        }
+
+        /// A right-click told to the page, which shows a menu of its own: none
+        /// of PDFKit's.
+        #[unsafe(method_id(menuForEvent:))]
+        fn menu_for_event(&self, event: &NSEvent) -> Option<Retained<NSMenu>> {
+            (self.ivars().tell)(self.click(event, true));
+            None
+        }
+    }
+);
+
+impl View {
+    fn new(
+        mtm: MainThreadMarker,
+        frame: NSRect,
+        layout: (f64, f64),
+        tell: Box<dyn Fn(Click)>,
+    ) -> Retained<Self> {
+        let this = Self::alloc(mtm).set_ivars(Ivars {
+            tell,
+            layout: Cell::new(layout),
+            marked: Cell::new(false),
+        });
+        unsafe { msg_send![super(this), initWithFrame: frame] }
+    }
+
+    /// The click of `event`: where in the page of the web view, the place of
+    /// the PDF (none off the pages), the text selected.
+    fn click(&self, event: &NSEvent, menu: bool) -> Click {
+        let in_window = event.locationInWindow();
+        let at = self.convertPoint_fromView(in_window, None);
+        let place = unsafe {
+            self.pageForPoint_nearest(at, false).and_then(|page| {
+                let number = self.document()?.indexForPage(&page) + 1;
+                Some(place_on(&page, number, self.convertPoint_toPage(at, &page)))
+            })
+        };
+        let selected = unsafe { self.currentSelection() }
+            .and_then(|s| unsafe { s.string() })
+            .map(|s| s.to_string())
+            .unwrap_or_default();
+        Click {
+            menu,
+            client: self.client(in_window),
+            place,
+            selected,
+        }
+    }
+
+    /// A point of the window in CSS pixels of the page of the web view (the
+    /// view's superview), as `rect` lays the view out.
+    fn client(&self, in_window: NSPoint) -> Point {
+        let (zoom, viewport) = self.ivars().layout.get();
+        let Some(content) = (unsafe { self.superview() }) else {
+            return Point { x: 0.0, y: 0.0 };
+        };
+        let p = content.convertPoint_fromView(in_window, None);
+        let height = content.bounds().size.height;
+        let top = (height - viewport * zoom).max(0.0);
+        let y = if content.isFlipped() {
+            p.y - top
+        } else {
+            height - top - p.y
+        };
+        Point {
+            x: p.x / zoom,
+            y: y / zoom,
+        }
+    }
+
+    /// The place `mark` marked taken away.
+    fn unmark(&self) {
+        if self.ivars().marked.replace(false) {
+            unsafe {
+                self.setHighlightedSelections(None);
+                redraw(self);
+            }
+        }
+    }
 }
 
 thread_local! {
@@ -99,8 +213,18 @@ pub fn open<R: Runtime>(
         let url = NSURL::fileURLWithPath(&NSString::from_str(&path.to_string_lossy()));
         let document = unsafe { PDFDocument::initWithURL(PDFDocument::alloc(), &url) }
             .ok_or_else(|| format!("{}: not a PDF that PDFKit reads", path.display()))?;
-        let view =
-            unsafe { PDFView::initWithFrame(PDFView::alloc(mtm), rect(content, frame, zoom)) };
+        let tell: Box<dyn Fn(Click)> = {
+            let (webview, target) = (handle.clone(), EventTarget::webview(&label));
+            Box::new(move |click| {
+                let _ = webview.emit_to(target.clone(), CLICK_EVENT, click);
+            })
+        };
+        let view = View::new(
+            mtm,
+            rect(content, frame, zoom),
+            (zoom, frame.viewport),
+            tell,
+        );
         unsafe {
             view.setDisplayMode(PDFDisplayMode::SinglePageContinuous);
             // margins at the sides of the pages, as Preview leaves them
@@ -153,7 +277,7 @@ pub fn open<R: Runtime>(
 /// notifications come on the main thread, where the view is).
 fn observe<R: Runtime>(
     webview: Webview<R>,
-    view: &Retained<PDFView>,
+    view: &Retained<View>,
     document: &Retained<PDFDocument>,
 ) -> Vec<Retained<ProtocolObject<dyn NSObjectProtocol>>> {
     let target = EventTarget::webview(webview.label());
@@ -257,6 +381,7 @@ pub fn set_frame<R: Runtime>(webview: Webview<R>, frame: Frame, zoom: f64) -> Re
                 && let Some(content) = unsafe { view.superview() }
             {
                 view.setFrame(rect(&content, frame, zoom));
+                view.ivars().layout.set((zoom, frame.viewport));
             }
         });
     })
@@ -355,8 +480,9 @@ pub fn find<R: Runtime>(
             };
             unsafe {
                 // PDFKit keeps drawing the marks it had: cleared first, the
-                // page redrawn after
+                // page redrawn after (the place `mark` marked among them)
                 view.setHighlightedSelections(None);
+                view.ivars().marked.set(false);
                 if text.is_empty() {
                     view.clearSelection();
                     redraw(view);
@@ -557,6 +683,7 @@ pub fn mark<R: Runtime>(
             };
             unsafe {
                 view.setHighlightedSelections(None);
+                view.ivars().marked.set(false);
                 let marked = page_of(document, page).and_then(|on| {
                     let length = on.string().map_or(0, |s| s.length());
                     let to = to.min(length);
@@ -573,6 +700,7 @@ pub fn mark<R: Runtime>(
                     1.0, 0.87, 0.0, 0.45,
                 )));
                 view.setHighlightedSelections(Some(&NSArray::from_slice(&[&*selection])));
+                view.ivars().marked.set(true);
                 // with room above and below it, not at the edge of the view
                 let b = selection.boundsForPage(&on);
                 view.goToRect_onPage(
@@ -915,6 +1043,14 @@ fn trimmed(parts: &[Part], range: Range<usize>) -> Range<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use objc2::ClassType;
+
+    #[test]
+    fn the_view_overrides_pdfkits_methods_as_pdfkit_has_them() {
+        // registering the class checks the overridden methods' signatures
+        // against PDFView's (debug assertions)
+        assert!(View::class().responds_to(objc2::sel!(menuForEvent:)));
+    }
 
     fn rect(x: f64, y: f64, width: f64, height: f64) -> Rect {
         Rect {
