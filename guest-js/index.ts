@@ -10,8 +10,8 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 export type Frame = { x: number; y: number; width: number; height: number; viewport: number };
 
 /** An entry of the outline; `target`, the indices that lead to it from the
- *  root (mirrors Entry). */
-export type Entry = { title: string; target: number[]; items: Entry[] };
+ *  root; `page`, the page it goes to (from 1; null if none; mirrors Entry). */
+export type Entry = { title: string; target: number[]; page: number | null; items: Entry[] };
 
 /** What the page learns of a PDF opened (mirrors Opened). */
 export type Opened = { count: number; outline: Entry[] };

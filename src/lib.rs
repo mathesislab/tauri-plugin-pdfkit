@@ -61,11 +61,13 @@ pub struct Frame {
 }
 
 /// An entry of the outline; `target`, the indices that lead to it from the
-/// root of the outline.
+/// root of the outline; `page`, the page it goes to (from 1; none if it goes
+/// nowhere).
 #[derive(Debug, Serialize)]
 pub struct Entry {
     pub title: String,
     pub target: Vec<usize>,
+    pub page: Option<usize>,
     pub items: Vec<Entry>,
 }
 

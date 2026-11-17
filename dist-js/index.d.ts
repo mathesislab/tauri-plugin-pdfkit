@@ -9,10 +9,11 @@ export type Frame = {
     viewport: number;
 };
 /** An entry of the outline; `target`, the indices that lead to it from the
- *  root (mirrors Entry). */
+ *  root; `page`, the page it goes to (from 1; null if none; mirrors Entry). */
 export type Entry = {
     title: string;
     target: number[];
+    page: number | null;
     items: Entry[];
 };
 /** What the page learns of a PDF opened (mirrors Opened). */

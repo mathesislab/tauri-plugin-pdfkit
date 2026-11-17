@@ -129,7 +129,7 @@ pub fn open<R: Runtime>(
         let opened = Opened {
             count: unsafe { document.pageCount() },
             outline: unsafe { document.outlineRoot() }
-                .map(|root| entries(&root, &mut Vec::new()))
+                .map(|root| entries(&root, &document, &mut Vec::new()))
                 .unwrap_or_default(),
         };
         SHOWN.with_borrow_mut(|shown| {
@@ -203,7 +203,7 @@ fn observe<R: Runtime>(
     }
 }
 
-fn entries(outline: &PDFOutline, path: &mut Vec<usize>) -> Vec<Entry> {
+fn entries(outline: &PDFOutline, document: &PDFDocument, path: &mut Vec<usize>) -> Vec<Entry> {
     (0..unsafe { outline.numberOfChildren() })
         .filter_map(|i| {
             let child = unsafe { outline.childAtIndex(i) }?;
@@ -213,7 +213,10 @@ fn entries(outline: &PDFOutline, path: &mut Vec<usize>) -> Vec<Entry> {
                     .map(|l| l.to_string())
                     .unwrap_or_default(),
                 target: path.clone(),
-                items: entries(&child, path),
+                page: unsafe { child.destination() }
+                    .and_then(|d| unsafe { d.page() })
+                    .map(|p| unsafe { document.indexForPage(&p) } + 1),
+                items: entries(&child, document, path),
             };
             path.pop();
             Some(entry)
