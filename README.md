@@ -18,11 +18,11 @@ where it began (`src-tauri/src/pdf_view.rs`), and
 ```toml
 # src-tauri/Cargo.toml
 [dependencies]
-tauri-plugin-pdfkit = { git = "https://github.com/mathesislab/tauri-plugin-pdfkit", tag = "v0.6.0" }
+tauri-plugin-pdfkit = { git = "https://github.com/mathesislab/tauri-plugin-pdfkit", tag = "v0.7.0" }
 ```
 
 ```bash
-npm install github:mathesislab/tauri-plugin-pdfkit#v0.6.0
+npm install github:mathesislab/tauri-plugin-pdfkit#v0.7.0
 ```
 
 The crate and the bindings go together: the same tag for both.
@@ -50,7 +50,7 @@ await close("paper-1");
 
 | Command | Does |
 |---|---|
-| `open(id, path, page, frame, covered)` | shows `path` at `page` over `frame`, in place of the PDF the web view shows; the page count and the outline |
+| `open(id, path, page, frame, covered, clicks)` | shows `path` at `page` over `frame`, in place of the PDF the web view shows; the page count and the outline. With `clicks` the page takes ⌘-clicks and right-clicks (`onClick`); without, PDFKit keeps them, its own menu with them |
 | `setFrame(frame)` | moves the view with its area |
 | `cover(id, covered)` | hides the view while a modal of the page is open, and gives the keys to the page |
 | `close(id)` | takes the view away |
@@ -65,13 +65,15 @@ await close("paper-1");
 | `mark(page, from, to)` | marks that part of the page's text, as a highlighter would, and scrolls to it; an empty range takes the mark away, as does the next click |
 | `onPage(handler)` | the page in view, as it changes (event `pdfkit:page`, to the web view) |
 | `onHistory(handler)` | `{ back, forward }`, whether there is a page to go back to or forward, as it changes (event `pdfkit:history`) |
-| `onClick(handler)` | a ⌘-click, or a right-click (`menu`), on the PDF: where in the page (`client`, CSS pixels), the place clicked and the text selected (event `pdfkit:click`). PDFKit shows no menu of its own: the page shows its own |
+| `onClick(handler)` | with `clicks`: a ⌘-click, or a right-click (`menu`), on the PDF: where in the page (`client`, CSS pixels), the place clicked and the text selected (event `pdfkit:click`). PDFKit shows no menu of its own: the page shows its own |
 
 The views of a window go when the window is destroyed, and the view of a
 web view when its page loads again.
 
 ## Versions
 
+- 0.7.0: the clicks are the page's only when it opens the PDF with `clicks`;
+  otherwise PDFKit keeps them and its menu, as before 0.6.0.
 - 0.6.0: the page of each entry of the outline; `place` and `mark`, for a
   place in the text of a page (a SyncTeX map's) found and marked; ⌘-clicks
   and right-clicks told to the page (`onClick`), which shows its own menu.
