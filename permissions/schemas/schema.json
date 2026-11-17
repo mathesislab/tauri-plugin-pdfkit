@@ -379,6 +379,18 @@
           "markdownDescription": "Denies the go command without any pre-configured scope."
         },
         {
+          "description": "Enables the mark command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-mark",
+          "markdownDescription": "Enables the mark command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the mark command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-mark",
+          "markdownDescription": "Denies the mark command without any pre-configured scope."
+        },
+        {
           "description": "Enables the open command without any pre-configured scope.",
           "type": "string",
           "const": "allow-open",
@@ -401,6 +413,18 @@
           "type": "string",
           "const": "deny-page-to",
           "markdownDescription": "Denies the page_to command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the place command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-place",
+          "markdownDescription": "Enables the place command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the place command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-place",
+          "markdownDescription": "Denies the place command without any pre-configured scope."
         },
         {
           "description": "Enables the selection command without any pre-configured scope.",
@@ -439,10 +463,10 @@
           "markdownDescription": "Denies the zoom command without any pre-configured scope."
         },
         {
-          "description": "All the commands of the PDF view\n#### This default permission set includes:\n\n- `allow-open`\n- `allow-frame`\n- `allow-cover`\n- `allow-close`\n- `allow-find`\n- `allow-zoom`\n- `allow-go`\n- `allow-back`\n- `allow-forward`\n- `allow-page-to`\n- `allow-turn`\n- `allow-selection`",
+          "description": "All the commands of the PDF view\n#### This default permission set includes:\n\n- `allow-open`\n- `allow-frame`\n- `allow-cover`\n- `allow-close`\n- `allow-find`\n- `allow-zoom`\n- `allow-go`\n- `allow-back`\n- `allow-forward`\n- `allow-page-to`\n- `allow-turn`\n- `allow-selection`\n- `allow-place`\n- `allow-mark`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "All the commands of the PDF view\n#### This default permission set includes:\n\n- `allow-open`\n- `allow-frame`\n- `allow-cover`\n- `allow-close`\n- `allow-find`\n- `allow-zoom`\n- `allow-go`\n- `allow-back`\n- `allow-forward`\n- `allow-page-to`\n- `allow-turn`\n- `allow-selection`"
+          "markdownDescription": "All the commands of the PDF view\n#### This default permission set includes:\n\n- `allow-open`\n- `allow-frame`\n- `allow-cover`\n- `allow-close`\n- `allow-find`\n- `allow-zoom`\n- `allow-go`\n- `allow-back`\n- `allow-forward`\n- `allow-page-to`\n- `allow-turn`\n- `allow-selection`\n- `allow-place`\n- `allow-mark`"
         }
       ]
     }

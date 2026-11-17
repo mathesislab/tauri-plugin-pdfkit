@@ -129,6 +129,22 @@ pub struct Selection {
     pub numbers: Vec<Mark>,
 }
 
+/// A place on a page (`page`, from 1): its point (`x`, `y`), in page points
+/// from the top left of the page's crop box, as SyncTeX and pdf.js have it; the
+/// text of the page, as PDFKit reads it; where the word at the point begins in
+/// it (`index`; the line's start when the point is on no word; none when on no
+/// text either), and the line there (`line`, from and to). The places in the
+/// text are in UTF-16 units, as NSString and JavaScript count them.
+#[derive(Debug, Clone, Serialize)]
+pub struct Place {
+    pub page: usize,
+    pub x: f64,
+    pub y: f64,
+    pub text: String,
+    pub index: Option<usize>,
+    pub line: Option<[usize; 2]>,
+}
+
 type Factor<R> = Box<dyn Fn(&AppHandle<R>) -> f64 + Send + Sync>;
 
 /// The points of a CSS pixel.
@@ -168,7 +184,8 @@ impl<R: Runtime> Builder<R> {
         let factor = Zoom(self.zoom);
         plugin::Builder::new("pdfkit")
             .invoke_handler(tauri::generate_handler![
-                open, frame, cover, close, find, zoom, go, back, forward, page_to, turn, selection
+                open, frame, cover, close, find, zoom, go, back, forward, page_to, turn, selection,
+                place, mark
             ])
             .setup(move |app, _| {
                 app.manage(factor);
@@ -294,4 +311,30 @@ async fn turn<R: Runtime>(webview: Webview<R>, to: Turn) -> Result<(), String> {
 #[tauri::command]
 async fn selection<R: Runtime>(webview: Webview<R>) -> Result<Option<Selection>, String> {
     platform::selection(webview)
+}
+
+/// The place at a point of a page (from 1), in page points from the top left
+/// of its crop box (as SyncTeX has it): the page's text and where the point is
+/// in it; none if there is no such page.
+#[tauri::command]
+async fn place<R: Runtime>(
+    webview: Webview<R>,
+    page: usize,
+    x: f64,
+    y: f64,
+) -> Result<Option<Place>, String> {
+    platform::place(webview, page, x, y)
+}
+
+/// The text of a page (from 1) from `from` to `to` (of its text, as `Place`
+/// has it) marked and scrolled to; an empty range takes the mark away. Whether
+/// marked.
+#[tauri::command]
+async fn mark<R: Runtime>(
+    webview: Webview<R>,
+    page: usize,
+    from: usize,
+    to: usize,
+) -> Result<bool, String> {
+    platform::mark(webview, page, from, to)
 }

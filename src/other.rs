@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use tauri::{Runtime, Webview};
 
-use crate::{Frame, Opened, Selection, Turn};
+use crate::{Frame, Opened, Place, Selection, Turn};
 
 const UNSUPPORTED: &str = "PDFKit: macOS only";
 
@@ -63,4 +63,12 @@ pub fn turn<R: Runtime>(_: Webview<R>, _: Turn) -> Result<(), String> {
 
 pub fn selection<R: Runtime>(_: Webview<R>) -> Result<Option<Selection>, String> {
     Ok(None)
+}
+
+pub fn place<R: Runtime>(_: Webview<R>, _: usize, _: f64, _: f64) -> Result<Option<Place>, String> {
+    Err(UNSUPPORTED.into())
+}
+
+pub fn mark<R: Runtime>(_: Webview<R>, _: usize, _: usize, _: usize) -> Result<bool, String> {
+    Err(UNSUPPORTED.into())
 }

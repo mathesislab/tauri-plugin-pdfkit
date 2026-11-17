@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-mark"
+description = "Enables the mark command without any pre-configured scope."
+commands.allow = ["mark"]
+
+[[permission]]
+identifier = "deny-mark"
+description = "Denies the mark command without any pre-configured scope."
+commands.deny = ["mark"]

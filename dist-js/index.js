@@ -59,6 +59,16 @@ export function turn(to) {
 export function selection() {
     return invoke("plugin:pdfkit|selection");
 }
+/** The place at a point of `page` (from 1), in page points from the top left
+ *  of its crop box (as SyncTeX has it); null if there is no such page. */
+export function place(page, x, y) {
+    return invoke("plugin:pdfkit|place", { page, x, y });
+}
+/** The text of `page` from `from` to `to` (of its text, as `Place` has it)
+ *  marked and scrolled to; an empty range takes the mark away. Whether marked. */
+export function mark(page, from, to) {
+    return invoke("plugin:pdfkit|mark", { page, from, to });
+}
 /** The page in view (from 1), as it changes, in this web view. */
 export function onPage(handler) {
     return getCurrentWebview().listen("pdfkit:page", (e) => handler(e.payload));

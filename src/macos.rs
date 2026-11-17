@@ -21,14 +21,14 @@ use objc2_foundation::{
     NSString, NSStringCompareOptions, NSURL,
 };
 use objc2_pdf_kit::{
-    PDFDisplayMode, PDFDocument, PDFOutline, PDFPage, PDFSelection, PDFView,
+    PDFDisplayBox, PDFDisplayMode, PDFDocument, PDFOutline, PDFPage, PDFSelection, PDFView,
     PDFViewChangedHistoryNotification, PDFViewPageChangedNotification,
 };
 use tauri::{Emitter, EventTarget, Runtime, Webview};
 
 use crate::{
-    Entry, Frame, HISTORY_EVENT, History, Line, Mark, Opened, PAGE_EVENT, Rect, Run, Selection,
-    Turn,
+    Entry, Frame, HISTORY_EVENT, History, Line, Mark, Opened, PAGE_EVENT, Place, Rect, Run,
+    Selection, Turn,
 };
 
 /// The PDF shown in a web view, with what tells the page of the page in view
@@ -518,6 +518,134 @@ pub fn selection<R: Runtime>(webview: Webview<R>) -> Result<Option<Selection>, S
             }
         })
     })
+}
+
+/// The place at a point of a page (from 1), in page points from the top left
+/// of its crop box; none if the web view shows no PDF or it has no such page.
+pub fn place<R: Runtime>(
+    webview: Webview<R>,
+    page: usize,
+    x: f64,
+    y: f64,
+) -> Result<Option<Place>, String> {
+    let label = webview.label().to_string();
+    on_main(&webview, move |_| {
+        SHOWN.with_borrow(|shown| {
+            let Shown { document, .. } = shown.get(&label)?;
+            unsafe {
+                let on = page_of(document, page)?;
+                Some(place_on(&on, page, NSPoint::new(x, top_of(&on) - y)))
+            }
+        })
+    })
+}
+
+/// The text of a page (from 1) from `from` to `to` marked, as a highlighter
+/// would, in place of what Find marked, and scrolled to; an empty range (or
+/// one that is not of the page) takes the marks away. Whether marked.
+pub fn mark<R: Runtime>(
+    webview: Webview<R>,
+    page: usize,
+    from: usize,
+    to: usize,
+) -> Result<bool, String> {
+    let label = webview.label().to_string();
+    on_main(&webview, move |_| {
+        SHOWN.with_borrow(|shown| {
+            let Some(Shown { view, document, .. }) = shown.get(&label) else {
+                return false;
+            };
+            unsafe {
+                view.setHighlightedSelections(None);
+                let marked = page_of(document, page).and_then(|on| {
+                    let length = on.string().map_or(0, |s| s.length());
+                    let to = to.min(length);
+                    let selection = (from < to)
+                        .then(|| on.selectionForRange(NSRange::new(from, to - from)))
+                        .flatten()?;
+                    Some((on, selection))
+                });
+                let Some((on, selection)) = marked else {
+                    redraw(view);
+                    return false;
+                };
+                selection.setColor(Some(&NSColor::colorWithSRGBRed_green_blue_alpha(
+                    1.0, 0.87, 0.0, 0.45,
+                )));
+                view.setHighlightedSelections(Some(&NSArray::from_slice(&[&*selection])));
+                // with room above and below it, not at the edge of the view
+                let b = selection.boundsForPage(&on);
+                view.goToRect_onPage(
+                    NSRect::new(
+                        NSPoint::new(b.origin.x, b.origin.y - MARGIN),
+                        NSSize::new(b.size.width, b.size.height + 2.0 * MARGIN),
+                    ),
+                    &on,
+                );
+                redraw(view);
+                true
+            }
+        })
+    })
+}
+
+/// The room left above and below a place marked, as it is scrolled to (page
+/// points).
+const MARGIN: f64 = 120.0;
+
+/// The page `page` (from 1) of a document, if it has one.
+unsafe fn page_of(document: &PDFDocument, page: usize) -> Option<Retained<PDFPage>> {
+    let count = unsafe { document.pageCount() };
+    (1..=count)
+        .contains(&page)
+        .then(|| unsafe { document.pageAtIndex(page - 1) })
+        .flatten()
+}
+
+/// The top of a page's crop box, from which a `Place` is measured.
+unsafe fn top_of(page: &PDFPage) -> f64 {
+    let crop = unsafe { page.boundsForBox(PDFDisplayBox::CropBox) };
+    crop.origin.y + crop.size.height
+}
+
+/// The place of the point `at` (page points, the origin at the bottom left)
+/// of `page`, whose number is `number`: the word and the line there, if the
+/// point is on them (PDFKit gives the nearest otherwise).
+unsafe fn place_on(page: &PDFPage, number: usize, at: NSPoint) -> Place {
+    let string = unsafe { page.string() };
+    let length = string.as_ref().map_or(0, |s| s.length());
+    let range = |selection: Option<Retained<PDFSelection>>, slack: f64| -> Option<[usize; 2]> {
+        let selection = selection?;
+        let b = unsafe { selection.boundsForPage(page) };
+        let near = at.x >= b.origin.x - slack
+            && at.x <= b.origin.x + b.size.width + slack
+            && at.y >= b.origin.y - slack
+            && at.y <= b.origin.y + b.size.height + slack;
+        if !near {
+            return None;
+        }
+        let (mut from, mut to) = (usize::MAX, 0);
+        for i in 0..unsafe { selection.numberOfTextRangesOnPage(page) } {
+            let r = unsafe { selection.rangeAtIndex_onPage(i, page) };
+            // NSNotFound, or beyond the string
+            if r.location.saturating_add(r.length) > length {
+                continue;
+            }
+            from = from.min(r.location);
+            to = to.max(r.location + r.length);
+        }
+        (from < to).then_some([from, to])
+    };
+    let word = range(unsafe { page.selectionForWordAtPoint(at) }, 1.0);
+    let line = range(unsafe { page.selectionForLineAtPoint(at) }, 2.0);
+    Place {
+        page: number,
+        x: at.x,
+        y: unsafe { top_of(page) } - at.y,
+        text: string.map(|s| s.to_string()).unwrap_or_default(),
+        index: word.or(line).map(|r| r[0]),
+        line,
+    }
 }
 
 /// The lines of a selection, each on its first page (those without text are

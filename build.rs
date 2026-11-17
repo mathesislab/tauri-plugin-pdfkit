@@ -11,6 +11,8 @@ const COMMANDS: &[&str] = &[
     "page_to",
     "turn",
     "selection",
+    "place",
+    "mark",
 ];
 
 fn main() {

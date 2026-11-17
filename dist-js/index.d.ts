@@ -69,6 +69,19 @@ export type History = {
     back: boolean;
     forward: boolean;
 };
+/** A place on a page (from 1): its point, in page points from the top left of
+ *  the page's crop box, as SyncTeX and pdf.js have it; the page's text, as
+ *  PDFKit reads it; where the word at the point begins in it (the line's start
+ *  off a word; null off the text), and the line there, from and to (mirrors
+ *  Place). */
+export type Place = {
+    page: number;
+    x: number;
+    y: number;
+    text: string;
+    index: number | null;
+    line: [number, number] | null;
+};
 /** Where to turn from the page in view (mirrors Turn). */
 export type Turn = "first" | "previous" | "next" | "last";
 /** The frame of an element of the page. */
@@ -101,6 +114,12 @@ export declare function turn(to: Turn): Promise<void>;
 /** The text selected in the PDF, line by line, with the words beside each line
  *  (the line numbers of a manuscript among them); null if nothing is selected. */
 export declare function selection(): Promise<Selection | null>;
+/** The place at a point of `page` (from 1), in page points from the top left
+ *  of its crop box (as SyncTeX has it); null if there is no such page. */
+export declare function place(page: number, x: number, y: number): Promise<Place | null>;
+/** The text of `page` from `from` to `to` (of its text, as `Place` has it)
+ *  marked and scrolled to; an empty range takes the mark away. Whether marked. */
+export declare function mark(page: number, from: number, to: number): Promise<boolean>;
 /** The page in view (from 1), as it changes, in this web view. */
 export declare function onPage(handler: (page: number) => void): Promise<UnlistenFn>;
 /** The history, when it changes, in this web view. */

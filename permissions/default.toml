@@ -15,4 +15,6 @@ permissions = [
   "allow-page-to",
   "allow-turn",
   "allow-selection",
+  "allow-place",
+  "allow-mark",
 ]

@@ -16,6 +16,8 @@ All the commands of the PDF view
 - `allow-page-to`
 - `allow-turn`
 - `allow-selection`
+- `allow-place`
+- `allow-mark`
 
 ## Permission Table
 
@@ -211,6 +213,32 @@ Denies the go command without any pre-configured scope.
 <tr>
 <td>
 
+`pdfkit:allow-mark`
+
+</td>
+<td>
+
+Enables the mark command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`pdfkit:deny-mark`
+
+</td>
+<td>
+
+Denies the mark command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `pdfkit:allow-open`
 
 </td>
@@ -256,6 +284,32 @@ Enables the page_to command without any pre-configured scope.
 <td>
 
 Denies the page_to command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`pdfkit:allow-place`
+
+</td>
+<td>
+
+Enables the place command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`pdfkit:deny-place`
+
+</td>
+<td>
+
+Denies the place command without any pre-configured scope.
 
 </td>
 </tr>
