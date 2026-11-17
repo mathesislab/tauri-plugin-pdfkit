@@ -82,6 +82,21 @@ pub struct Opened {
     pub outline: Vec<Entry>,
 }
 
+/// What the page asks for in opening a PDF: `path` at `page` (from 1), over
+/// `frame`; hidden while a modal of the page is `covered`; `id` names it for
+/// `cover` and `close`. With `clicks`, the page takes a ⌘-click and a
+/// right-click (`Click`, its own menu) from PDFKit; without, PDFKit has them
+/// (its own menu).
+#[derive(Debug, Deserialize)]
+pub struct Opening {
+    pub id: String,
+    pub path: PathBuf,
+    pub page: usize,
+    pub frame: Frame,
+    pub covered: bool,
+    pub clicks: bool,
+}
+
 /// A rectangle of a page, in page points, the origin at the bottom left as
 /// PDFKit has it.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
@@ -159,7 +174,8 @@ pub struct Point {
 
 /// A ⌘-click on the PDF, or a right-click (`menu`: PDFKit shows no menu of its
 /// own, for the page to show its own at `client`): the place clicked (none off
-/// the pages) and the text selected (empty if none).
+/// the pages) and the text selected (empty if none). Told only to a page that
+/// opened the PDF with `clicks`.
 #[derive(Debug, Clone, Serialize)]
 pub struct Click {
     pub menu: bool,
@@ -240,21 +256,15 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::new().build()
 }
 
-/// Open `path` at `page` (from 1), over `frame`, in place of the PDF the
-/// web view shows; hidden while a modal of the page is `covered`. `id` names it
-/// for `cover` and `close`.
+/// Open a PDF in place of the one the web view shows, as `opening` says.
 #[tauri::command]
 async fn open<R: Runtime>(
     webview: Webview<R>,
     zoom: State<'_, Zoom<R>>,
-    id: String,
-    path: PathBuf,
-    page: usize,
-    frame: Frame,
-    covered: bool,
+    opening: Opening,
 ) -> Result<Opened, String> {
     let zoom = zoom.factor(&webview);
-    platform::open(webview, id, path, page, frame, covered, zoom)
+    platform::open(webview, opening, zoom)
 }
 
 /// The area moved or changed size.

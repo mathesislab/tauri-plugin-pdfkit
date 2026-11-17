@@ -6,7 +6,6 @@
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::ops::Range;
-use std::path::PathBuf;
 use std::ptr::NonNull;
 use std::rc::Rc;
 use std::sync::mpsc;
@@ -29,8 +28,8 @@ use objc2_pdf_kit::{
 use tauri::{Emitter, EventTarget, Runtime, Webview};
 
 use crate::{
-    CLICK_EVENT, Click, Entry, Frame, HISTORY_EVENT, History, Line, Mark, Opened, PAGE_EVENT,
-    Place, Point, Rect, Run, Selection, Turn,
+    CLICK_EVENT, Click, Entry, Frame, HISTORY_EVENT, History, Line, Mark, Opened, Opening,
+    PAGE_EVENT, Place, Point, Rect, Run, Selection, Turn,
 };
 
 /// The PDF shown in a web view, with what tells the page of the page in view
@@ -44,12 +43,12 @@ struct Shown {
     observers: Vec<Retained<ProtocolObject<dyn NSObjectProtocol>>>,
 }
 
-/// What the view keeps: what tells the page of a click (`tell`), the layout of
-/// the page to say where (the points of a CSS pixel, the height of its
-/// viewport in CSS pixels), and whether `mark` marked a place, which the next
-/// click takes away.
+/// What the view keeps: what tells the page of a click (`tell`; none: PDFKit
+/// has the clicks), the layout of the page to say where (the points of a CSS
+/// pixel, the height of its viewport in CSS pixels), and whether `mark` marked
+/// a place, which the next click takes away.
 struct Ivars {
-    tell: Box<dyn Fn(Click)>,
+    tell: Option<Box<dyn Fn(Click)>>,
     layout: Cell<(f64, f64)>,
     marked: Cell<bool>,
 }
@@ -60,28 +59,36 @@ define_class!(
     #[thread_kind = MainThreadOnly]
     #[name = "TauriPluginPdfkitView"]
     #[ivars = Ivars]
-    /// PDFKit's view, which tells the page of a ⌘-click and of a right-click.
+    /// PDFKit's view, which tells the page that asks of a ⌘-click and of a
+    /// right-click.
     struct View;
 
     impl View {
-        /// A ⌘-click told to the page; any other click takes the mark away
-        /// and is PDFKit's.
+        /// A ⌘-click told to the page that takes the clicks; any other click
+        /// takes the mark away and is PDFKit's.
         #[unsafe(method(mouseDown:))]
         fn mouse_down(&self, event: &NSEvent) {
-            if event.modifierFlags().contains(NSEventModifierFlags::Command) {
-                (self.ivars().tell)(self.click(event, false));
+            if let Some(tell) = &self.ivars().tell
+                && event.modifierFlags().contains(NSEventModifierFlags::Command)
+            {
+                tell(self.click(event, false));
                 return;
             }
             self.unmark();
             let _: () = unsafe { msg_send![super(self), mouseDown: event] };
         }
 
-        /// A right-click told to the page, which shows a menu of its own: none
-        /// of PDFKit's.
+        /// A right-click told to the page that takes the clicks, which shows a
+        /// menu of its own: none of PDFKit's; else PDFKit's menu.
         #[unsafe(method_id(menuForEvent:))]
         fn menu_for_event(&self, event: &NSEvent) -> Option<Retained<NSMenu>> {
-            (self.ivars().tell)(self.click(event, true));
-            None
+            match &self.ivars().tell {
+                Some(tell) => {
+                    tell(self.click(event, true));
+                    None
+                }
+                None => unsafe { msg_send![super(self), menuForEvent: event] },
+            }
         }
     }
 );
@@ -91,7 +98,7 @@ impl View {
         mtm: MainThreadMarker,
         frame: NSRect,
         layout: (f64, f64),
-        tell: Box<dyn Fn(Click)>,
+        tell: Option<Box<dyn Fn(Click)>>,
     ) -> Retained<Self> {
         let this = Self::alloc(mtm).set_ivars(Ivars {
             tell,
@@ -179,18 +186,21 @@ fn on_main<R: Runtime, T: Send + 'static>(
     rx.recv().map_err(|e| e.to_string())
 }
 
-/// Open `path` at `page` (from 1), over `frame`, in place of the PDF the
-/// web view shows; hidden when a modal of the page is `covered`. `zoom`: the
-/// points of a CSS pixel.
+/// Open a PDF in place of the one the web view shows, as `opening` says.
+/// `zoom`: the points of a CSS pixel.
 pub fn open<R: Runtime>(
     webview: Webview<R>,
-    id: String,
-    path: PathBuf,
-    page: usize,
-    frame: Frame,
-    covered: bool,
+    opening: Opening,
     zoom: f64,
 ) -> Result<Opened, String> {
+    let Opening {
+        id,
+        path,
+        page,
+        frame,
+        covered,
+        clicks,
+    } = opening;
     if !path.exists() {
         return Err(format!("{}: not found", path.display()));
     }
@@ -213,12 +223,12 @@ pub fn open<R: Runtime>(
         let url = NSURL::fileURLWithPath(&NSString::from_str(&path.to_string_lossy()));
         let document = unsafe { PDFDocument::initWithURL(PDFDocument::alloc(), &url) }
             .ok_or_else(|| format!("{}: not a PDF that PDFKit reads", path.display()))?;
-        let tell: Box<dyn Fn(Click)> = {
+        let tell = clicks.then(|| {
             let (webview, target) = (handle.clone(), EventTarget::webview(&label));
             Box::new(move |click| {
                 let _ = webview.emit_to(target.clone(), CLICK_EVENT, click);
-            })
-        };
+            }) as Box<dyn Fn(Click)>
+        });
         let view = View::new(
             mtm,
             rect(content, frame, zoom),

@@ -1,23 +1,13 @@
 //! Elsewhere than on macOS there is no PDFKit: the commands fail, and the
 //! page shows the PDF itself.
 
-use std::path::PathBuf;
-
 use tauri::{Runtime, Webview};
 
-use crate::{Frame, Opened, Place, Selection, Turn};
+use crate::{Frame, Opened, Opening, Place, Selection, Turn};
 
 const UNSUPPORTED: &str = "PDFKit: macOS only";
 
-pub fn open<R: Runtime>(
-    _: Webview<R>,
-    _: String,
-    _: PathBuf,
-    _: usize,
-    _: Frame,
-    _: bool,
-    _: f64,
-) -> Result<Opened, String> {
+pub fn open<R: Runtime>(_: Webview<R>, _: Opening, _: f64) -> Result<Opened, String> {
     Err(UNSUPPORTED.into())
 }
 

@@ -8,9 +8,11 @@ export function frameOf(el) {
     return { x: box.left, y: box.top, width: box.width, height: box.height, viewport: window.innerHeight };
 }
 /** Open `path` at `page` (from 1) over `frame`, in place of the PDF the
- *  web view shows; hidden while `covered`. `id` names it for `cover` and `close`. */
-export function open(id, path, page, frame, covered = false) {
-    return invoke("plugin:pdfkit|open", { id, path, page, frame, covered });
+ *  web view shows; hidden while `covered`. `id` names it for `cover` and `close`.
+ *  With `clicks`, the page takes a ⌘-click and a right-click (`onClick`, its own
+ *  menu) from PDFKit; without, PDFKit has them (its own menu). */
+export function open(id, path, page, frame, covered = false, clicks = false) {
+    return invoke("plugin:pdfkit|open", { opening: { id, path, page, frame, covered, clicks } });
 }
 /** The area moved or changed size. */
 export function setFrame(frame) {
@@ -77,7 +79,8 @@ export function onPage(handler) {
 export function onHistory(handler) {
     return getCurrentWebview().listen("pdfkit:history", (e) => handler(e.payload));
 }
-/** A ⌘-click or a right-click on the PDF, in this web view. */
+/** A ⌘-click or a right-click on the PDF, in this web view, opened with
+ *  `clicks`. */
 export function onClick(handler) {
     return getCurrentWebview().listen("pdfkit:click", (e) => handler(e.payload));
 }
