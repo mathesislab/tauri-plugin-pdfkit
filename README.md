@@ -18,11 +18,11 @@ where it began (`src-tauri/src/pdf_view.rs`), and
 ```toml
 # src-tauri/Cargo.toml
 [dependencies]
-tauri-plugin-pdfkit = { git = "https://github.com/mathesislab/tauri-plugin-pdfkit", tag = "v0.7.0" }
+tauri-plugin-pdfkit = { git = "https://github.com/mathesislab/tauri-plugin-pdfkit", tag = "v0.7.1" }
 ```
 
 ```bash
-npm install github:mathesislab/tauri-plugin-pdfkit#v0.7.0
+npm install github:mathesislab/tauri-plugin-pdfkit#v0.7.1
 ```
 
 The crate and the bindings go together: the same tag for both.
@@ -52,7 +52,7 @@ await close("paper-1");
 |---|---|
 | `open(id, path, page, frame, covered, clicks)` | shows `path` at `page` over `frame`, in place of the PDF the web view shows; the page count and the outline. With `clicks` the page takes ⌘-clicks and right-clicks (`onClick`); without, PDFKit keeps them, its own menu with them |
 | `setFrame(frame)` | moves the view with its area |
-| `cover(id, covered)` | hides the view while a modal of the page is open, and gives the keys to the page |
+| `cover(id, covered)` | hides the view while a modal of the page is open, and gives the keys to the page; shown again, the view has the keys back if it had them (a text beside it keeps them otherwise). On a view shown, `cover(id, false)` gives it the keys |
 | `close(id)` | takes the view away |
 | `find(text, again, backwards)` | marks all the places, selects the first, the next or the one before; an empty text clears |
 | `zoom(step)` | in (1), out (-1), the width of the area (0) |
@@ -72,6 +72,8 @@ web view when its page loads again.
 
 ## Versions
 
+- 0.7.1: a view shown again after a modal has the keys back only if it had
+  them: the page's own text beside it keeps them.
 - 0.7.0: the clicks are the page's only when it opens the PDF with `clicks`;
   otherwise PDFKit keeps them and its menu, as before 0.6.0.
 - 0.6.0: the page of each entry of the outline; `place` and `mark`, for a
