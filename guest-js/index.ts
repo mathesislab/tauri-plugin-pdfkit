@@ -83,7 +83,8 @@ export function setFrame(frame: Frame): Promise<void> {
 }
 
 /** A modal of the page opened (`covered`) or closed: the view lies above all
- *  of the page, so it hides while a modal shows. */
+ *  of the page, so it hides while a modal shows, and has the keys back after
+ *  only if it had them. On a view shown, `cover(id, false)` gives it the keys. */
 export function cover(id: string, covered: boolean): Promise<void> {
   return invoke("plugin:pdfkit|cover", { id, covered });
 }

@@ -109,7 +109,8 @@ export declare function open(id: string, path: string, page: number, frame: Fram
 /** The area moved or changed size. */
 export declare function setFrame(frame: Frame): Promise<void>;
 /** A modal of the page opened (`covered`) or closed: the view lies above all
- *  of the page, so it hides while a modal shows. */
+ *  of the page, so it hides while a modal shows, and has the keys back after
+ *  only if it had them. On a view shown, `cover(id, false)` gives it the keys. */
 export declare function cover(id: string, covered: boolean): Promise<void>;
 /** The PDF `id` is not in front any more: its view goes. */
 export declare function close(id: string): Promise<void>;

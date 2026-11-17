@@ -45,12 +45,14 @@ struct Shown {
 
 /// What the view keeps: what tells the page of a click (`tell`; none: PDFKit
 /// has the clicks), the layout of the page to say where (the points of a CSS
-/// pixel, the height of its viewport in CSS pixels), and whether `mark` marked
-/// a place, which the next click takes away.
+/// pixel, the height of its viewport in CSS pixels), whether `mark` marked a
+/// place, which the next click takes away, and whether it had the keys when a
+/// modal covered it, to have them back after.
 struct Ivars {
     tell: Option<Box<dyn Fn(Click)>>,
     layout: Cell<(f64, f64)>,
     marked: Cell<bool>,
+    had_keys: Cell<bool>,
 }
 
 define_class!(
@@ -104,6 +106,7 @@ impl View {
             tell,
             layout: Cell::new(layout),
             marked: Cell::new(false),
+            had_keys: Cell::new(false),
         });
         unsafe { msg_send![super(this), initWithFrame: frame] }
     }
@@ -150,6 +153,17 @@ impl View {
             x: p.x / zoom,
             y: y / zoom,
         }
+    }
+
+    /// Whether the keys go to the view (or to a view in it, as PDFKit's pages).
+    fn has_keys(&self) -> bool {
+        let Some(window) = self.window() else {
+            return false;
+        };
+        window
+            .firstResponder()
+            .and_then(|r| r.downcast::<NSView>().ok())
+            .is_some_and(|v| v.isDescendantOf(self))
     }
 
     /// The place `mark` marked taken away.
@@ -398,7 +412,8 @@ pub fn set_frame<R: Runtime>(webview: Webview<R>, frame: Frame, zoom: f64) -> Re
 }
 
 /// A modal of the page opened (`covered`) or closed: the view, which lies above all of the page, hides
-/// so that the modal shows and takes the keys, and is shown again, with the keys, when it is closed.
+/// so that the modal shows and takes the keys, and is shown again when it is closed, with the keys if it
+/// had them (the page's text keeps them otherwise). Not covered already, the view takes the keys.
 pub fn cover<R: Runtime>(webview: Webview<R>, id: String, covered: bool) -> Result<(), String> {
     let label = webview.label().to_string();
     on_main(&webview, move |_| {
@@ -406,15 +421,26 @@ pub fn cover<R: Runtime>(webview: Webview<R>, id: String, covered: bool) -> Resu
             let Some(Shown { view, .. }) = shown.get(&label).filter(|s| s.id == id) else {
                 return;
             };
-            view.setHidden(covered);
-            let Some(window) = view.window() else { return };
+            let Some(window) = view.window() else {
+                view.setHidden(covered);
+                return;
+            };
+            let was_hidden = view.isHidden();
             if covered {
-                // the keys go to the page, to the modal
-                if let Some(page) = unsafe { view.superview() } {
-                    window.makeFirstResponder(Some(&page));
+                if !was_hidden {
+                    let had = view.has_keys();
+                    view.ivars().had_keys.set(had);
+                    // the keys go to the page, to the modal
+                    if had && let Some(page) = unsafe { view.superview() } {
+                        window.makeFirstResponder(Some(&page));
+                    }
                 }
+                view.setHidden(true);
             } else {
-                window.makeFirstResponder(Some(view));
+                view.setHidden(false);
+                if !was_hidden || view.ivars().had_keys.replace(false) {
+                    window.makeFirstResponder(Some(view));
+                }
             }
         });
     })

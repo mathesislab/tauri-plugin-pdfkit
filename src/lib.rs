@@ -279,7 +279,8 @@ async fn frame<R: Runtime>(
 }
 
 /// A modal of the page opened (`covered`) or closed: the view, which lies
-/// above all of the page, hides so that the modal shows and takes the keys.
+/// above all of the page, hides so that the modal shows and takes the keys, and
+/// has them back after only if it had them. On a view shown, it takes the keys.
 #[tauri::command]
 async fn cover<R: Runtime>(webview: Webview<R>, id: String, covered: bool) -> Result<(), String> {
     platform::cover(webview, id, covered)
